@@ -1,0 +1,9 @@
+streamlit
+numpy
+py3Dmol
+ipython
+pandas
+plotly
+pyscf
+pyfock
+pylibxc2

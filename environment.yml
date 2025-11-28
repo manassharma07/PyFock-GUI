@@ -1,0 +1,17 @@
+name: myenv
+channels:
+  - conda-forge
+
+dependencies:
+  - pip
+  - pylibxc        # only this is installed via conda
+
+  - pip:
+      - streamlit
+      - numpy
+      - py3Dmol
+      - ipython
+      - pandas
+      - plotly
+      - pyscf
+      - pyfock
