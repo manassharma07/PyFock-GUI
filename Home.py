@@ -65,9 +65,10 @@ st.sidebar.markdown("---")
 # Links section
 st.sidebar.markdown("### 🔗 Links & Resources")
 st.sidebar.markdown("""
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock)
+[![GitHub (PyFock)](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock)
+[![GitHub (PyFock GUI)](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock-GUI)
 [![PyPI](https://img.shields.io/badge/PyPI-Package-orange?logo=pypi)](https://pypi.org/project/pyfock/)
-[![Docs](https://img.shields.io/badge/Documentation-Read-green?logo=readthedocs)](https://github.com/manassharma07/PyFock/blob/main/Documentation.md)
+[![Docs](https://img.shields.io/badge/Documentation-Read-green?logo=readthedocs)](https://pyfock-docs.bragitoff.com)
 
 📄 **Paper:** [arXiv preprint](https://arxiv.org) *(coming soon)*
 
@@ -79,16 +80,25 @@ st.sidebar.markdown("""
 st.sidebar.markdown("---")
 
 # Installation
-with st.sidebar.expander("📦 Installation Instructions"):
+with st.sidebar.expander("📦 Installation Instructions for PyFock"):
     st.code("""
+# Install LibXC — required by PyFock
+# For Python < 3.10:
+# Install system LibXC and then install pylibxc2 via pip
+sudo apt-get install libxc-dev     # Ubuntu/Debian
+pip install pylibxc2
+
+# For Python >= 3.10:
+# pip wheels for pylibxc2 may be unavailable
+# Use conda-forge instead (recommended)
+conda install -c conda-forge pylibxc -y
+
 # Install PyFock
 pip install pyfock
 
-# For GPU support
-pip install cupy-cuda12x  # or appropriate version
+# Optional: GPU support
+pip install cupy-cuda12x   # choose version appropriate for your CUDA setup
 
-# Install dependencies
-pip install pyscf numba numpy scipy
 """, language="bash")
 
 st.sidebar.markdown("---")
@@ -450,8 +460,8 @@ with col1:
     max_iterations = st.number_input("Max Iterations:", min_value=1, max_value=16, value=14)
     conv_crit = st.number_input("Convergence Criterion:", min_value=1e-7, max_value=1e-3, value=1e-6, format="%.1e")
     ncores = 1#st.number_input("Number of Cores:", min_value=1, max_value=8, value=4)
-    use_pyscf_grids = st.checkbox("Use PySCF Grids", value=True, help="Use either PySCF grids for both PyFock and PySCF DFT calculation or PyFock grids for both PyFock and PySCF DFT calculaiton. Using PySCF grids is recommended as those are more efficient and also makes the comparison with PySCF consistent.") 
-    compare_pyscf = st.checkbox("Compare with PySCF (may take longer)", value=False, help="Runs a KS-DFT calculation using same settings in PySCF for energy comparison.")
+    use_pyscf_grids = st.checkbox("Use PySCF Grids for XC Term", value=True, help="Use either PySCF grids or PyFock grids for DFT calculaiton. Using PySCF grids is recommended as those are relatively smaller. NOTE: This does not perform a PySCF DFT calculation, only grid generation.") 
+    compare_pyscf = st.checkbox("Compare energy with PySCF (will take longer)", value=False, help="Runs a KS-DFT calculation using same settings in PySCF for energy comparison.")
 
 st.markdown("---")
 
@@ -564,7 +574,7 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
             dftObj = DFT(mol, basis, auxbasis_obj, xc=funcidcrysx, grids=grids, gridsLevel=3)
             dftObj.conv_crit = conv_crit
             dftObj.max_itr = max_iterations
-            dftObj.ncores = 1
+            dftObj.ncores = ncores
             dftObj.save_ao_values = True
             
             # Run SCF calculation
@@ -1003,15 +1013,14 @@ else:
     
     ### Notes
     
-    - Calculations are limited to ~120 basis functions for Streamlit Cloud
-    - Smaller molecules and basis sets will run faster
-    - PySCF comparison adds computation time but validates results
-    - All calculations use density fitting for efficiency
+    - Calculations are limited to ~120 basis functions when running on cloud. Download the repo and run the streamlit app locally for larger systems.
+    - Smaller molecules and basis sets will run faster.
+    - PySCF comparison adds computation time but validates energy.
+    - All calculations use density fitting (resolution of identity) for efficiency.
     
     ### Example Systems
     
     - **Water**: Quick test system (7 basis functions with sto-3g)
-    - **Methane**: Small hydrocarbon (9 basis functions with sto-3g)
     - **Benzene**: Aromatic system (42 basis functions with sto-3g)
     """)
 
