@@ -26,6 +26,53 @@ st.set_page_config(
         'About': "PyFock GUI - A web interface for PyFock, a pure Python DFT code with Numba JIT acceleration"
     }
 )
+# === Background video styling ===
+# CSS for Background Video and Content Styling
+def set_css():
+    st.markdown("""
+        <style>
+            #myVideo {
+                position: fixed;
+                right: 0;
+                bottom: 0;
+                min-width: 100%; 
+                min-height: 100%;
+                opacity: 0.12; /* <--- adjust video opacity here (0 to 1) */
+                pointer-events: none;  /* FIX: allow scrolling */
+            }
+            .content {
+                position: fixed;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                color: #f1f1f1;
+                width: 100%;
+                padding: 20px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+# Embed Background Video
+def embed_video():
+    video_link = "https://pyfock.bragitoff.com/background_video_pyfock.mp4"
+    st.sidebar.markdown(f"""
+        <video autoplay muted loop id="myVideo">
+            <source src="{video_link}">
+            Your browser does not support HTML5 video.
+        </video>
+    """, unsafe_allow_html=True)
+
+set_css()
+embed_video()
+
+# Set page configuration
+# st.set_page_config(
+#     page_title='PyFock GUI - Interactive DFT Calculations',
+#     layout='wide',
+#     page_icon="⚛️",
+#     menu_items={
+#         'About': "PyFock GUI - A web interface for PyFock, a pure Python DFT code with Numba JIT acceleration"
+#     }
+# )
 
 # Sidebar with enhanced styling
 st.sidebar.image("https://raw.githubusercontent.com/manassharma07/PyFock/main/logo_crysx_pyfock.png", use_container_width=True)
