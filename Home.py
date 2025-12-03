@@ -53,7 +53,7 @@ def set_css():
 
 # Embed Background Video
 def embed_video():
-    video_link = "https://pyfock.bragitoff.com/background_video_pyfock.mp4"
+    video_link = "https://raw.githubusercontent.com/manassharma07/Website_Files_for_PyFock/main/background_video_pyfock.mp4"
     st.sidebar.markdown(f"""
         <video autoplay muted loop id="myVideo">
             <source src="{video_link}">
