@@ -159,11 +159,13 @@ Contributions are welcome. Please submit a Pull Request or open an issue to disc
 If you use PyFock or PyFock GUI in your research, please cite:
 
 ```bibtex
-@software{pyfock2024,
+@software{pyfock2025,
   author = {Sharma, Manas},
-  title = {PyFock: Pure Python DFT with Numba Acceleration},
-  year = {2024},
-  url = {https://github.com/manassharma07/PyFock}
+  title = {PyFock: A Pure Python Gaussian Basis DFT Code for CPU and GPU},
+  year = {2025},
+  url = {https://github.com/manassharma07/PyFock},
+  journal={[Journal Name]},
+  note={Manuscript in preparation}
 }
 ```
 

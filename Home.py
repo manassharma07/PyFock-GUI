@@ -117,7 +117,7 @@ st.sidebar.markdown("""
 [![PyPI](https://img.shields.io/badge/PyPI-Package-orange?logo=pypi)](https://pypi.org/project/pyfock/)
 [![Docs](https://img.shields.io/badge/Documentation-Read-green?logo=readthedocs)](https://pyfock-docs.bragitoff.com)
 
-📄 **Paper:** [arXiv preprint](https://arxiv.org) *(coming soon)*
+📄 **Article:** *(coming soon)*
 
 👨‍💻 **Developer:** [Manas Sharma](https://www.linkedin.com/in/manassharma07)
 
@@ -518,7 +518,7 @@ st.header("2. Cube Generation and Visualization Settings")
 col3, col4, col5 = st.columns(3)
 
 with col3:
-    cube_resolution = st.slider("Cube File Resolution (nx=ny=nz):", 30, 70, 40)
+    cube_resolution = st.slider("Cube File Resolution (nx=ny=nz):", 30, 50, 40)
 with col4:
     isovalue = st.number_input("Isovalue:", 0.0, 1.0, value=0.05, step=0.001, format="%.6f")
 with col5:
