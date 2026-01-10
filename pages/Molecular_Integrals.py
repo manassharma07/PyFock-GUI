@@ -15,7 +15,7 @@ from plotly.subplots import make_subplots
 
 @st.cache_data
 def load_4c2e_eri(_basis):
-    ERI = Integrals.conv_4c2e_symm(basis)
+    ERI = Integrals.rys_4c2e_symm(basis)
     return ERI
 
 # Set page configuration
@@ -509,7 +509,7 @@ if st.button("🧮 Calculate Integrals", type="primary", use_container_width=Tru
             else:
                 status_text.text("Calculating 4c2e integrals (this may take a while)...")
                 start = time.time()
-                ERI = Integrals.conv_4c2e_symm(basis)
+                ERI = Integrals.rys_4c2e_symm(basis)
                 # ERI = load_4c2e_eri(basis)
                 timings['4c2e'] = time.time() - start
                 results['4c2e'] = ERI
