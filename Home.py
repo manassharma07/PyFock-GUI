@@ -16,6 +16,7 @@ import io as _io
 from ase import Atoms
 from ase.io import read as ase_read
 import pandas as pd
+import pyfock
 
 # Set page configuration
 st.set_page_config(
@@ -75,9 +76,9 @@ embed_video()
 # )
 
 # Sidebar with enhanced styling
-st.sidebar.image("https://raw.githubusercontent.com/manassharma07/PyFock/main/logo_crysx_pyfock.png", use_container_width=True)
+# st.sidebar.image("https://raw.githubusercontent.com/manassharma07/PyFock/main/logo_crysx_pyfock.png", use_container_width=True)
+st.logo("https://raw.githubusercontent.com/manassharma07/PyFock/main/logo_crysx_pyfock.png", size="large", link="https://github.com/manassharma07/pyfock",)
 
-st.sidebar.markdown("---")
 
 # About PyFock section
 st.sidebar.markdown("### About PyFock")
@@ -1120,3 +1121,5 @@ st.markdown("""
     <p>⚡ Fast • 🎯 Accurate • 🐍 Pure Python</p>
 </div>
 """, unsafe_allow_html=True)
+
+st.sidebar.write('PyFock version being used for this GUI:', pyfock.__version__)
