@@ -249,6 +249,7 @@ H    -0.480000    0.830000    0.000000""",
 }
 
 BASIS_SETS = ["sto-3g", "sto-6g", "3-21G", "4-31G", "6-31G", "6-31+G", "6-31++G", "cc-pvDZ", "def2-SVP", "def2-TZVP"]
+AUXBASIS_SETS = ["def2-universal-jkfit", "def2-universal-jfit", "sto-3g", "def2-SVP", "6-31G"]
 
 # Main title
 st.title("🧮 PyFock - Molecular Integrals Calculator")
@@ -322,6 +323,7 @@ with col2:
 with col1:
     st.subheader("Basis Set Configuration")
     basis_set = st.selectbox("Basis Set:", BASIS_SETS, index=0)
+    auxbasis_set = st.selectbox("Basis Set:", AUXBASIS_SETS, index=0)
     use_spherical = st.checkbox("Convert to Spherical AOs (SAO)", value=False, 
                                 help="Convert integrals from Cartesian AOs (CAO) to Spherical AOs (SAO)")
 
@@ -346,9 +348,9 @@ with col4:
     calc_eri_4c2e = st.checkbox("4-Center 2-Electron (ERI)", value=False,
                                 help="⟨φᵢφⱼ|1/r₁₂|φₖφₗ⟩ - Electron-electron repulsion")
     
-    if calc_eri_4c2e:
-        eri_algorithm = st.radio("Algorithm:", ["Rys Quadrature (Fast)", "Conventional (Slow)"],
-                                help="Rys quadrature is significantly faster for most systems")
+    # if calc_eri_4c2e:
+    #     eri_algorithm = st.radio("Algorithm:", ["Rys Quadrature (Fast)", "Conventional (Slow)"],
+    #                             help="Rys quadrature is significantly faster for most systems")
     
     calc_eri_3c2e = st.checkbox("3-Center 2-Electron (3c2e)", value=False,
                                 help="Used in density fitting / RI approximations")
@@ -356,533 +358,503 @@ with col4:
                                 help="Auxiliary basis integrals for density fitting")
 
 # Subset selection
-st.subheader("Optional: Calculate Subset of Matrix")
-use_subset = st.checkbox("Calculate only a subset of the integral matrix", value=False)
-
-if use_subset:
-    col5, col6, col7, col8 = st.columns(4)
-    with col5:
-        row_start = st.number_input("Row Start:", min_value=0, value=0, step=1)
-    with col6:
-        row_end = st.number_input("Row End:", min_value=1, value=5, step=1)
-    with col7:
-        col_start = st.number_input("Col Start:", min_value=0, value=0, step=1)
-    with col8:
-        col_end = st.number_input("Col End:", min_value=1, value=5, step=1)
+# st.subheader("Optional: Calculate Subset of Matrix")
+# use_subset = st.checkbox("Calculate only a subset of the integral matrix", value=False)
+use_subset = False
+# if use_subset:
+#     col5, col6, col7, col8 = st.columns(4)
+#     with col5:
+#         row_start = st.number_input("Row Start:", min_value=0, value=0, step=1)
+#     with col6:
+#         row_end = st.number_input("Row End:", min_value=1, value=5, step=1)
+#     with col7:
+#         col_start = st.number_input("Col Start:", min_value=0, value=0, step=1)
+#     with col8:
+#         col_end = st.number_input("Col End:", min_value=1, value=5, step=1)
 
 st.markdown("---")
 
 # Calculate button
-if st.button("🧮 Calculate Integrals", type="primary"):
+# if st.button("🧮 Calculate Integrals", type="primary"):
     
-    if not xyz_content.strip():
-        st.error("Please provide XYZ coordinates!")
+if not xyz_content.strip():
+    st.error("Please provide XYZ coordinates!")
+    st.stop()
+
+# Check if at least one integral type is selected
+if not any([calc_overlap, calc_kinetic, calc_nuclear, calc_eri_4c2e, calc_eri_3c2e, calc_eri_2c2e]):
+    st.error("Please select at least one integral type to calculate!")
+    st.stop()
+
+progress_bar = st.progress(0)
+status_text = st.empty()
+
+try:
+    status_text.text("Importing PyFock modules...")
+    progress_bar.progress(10)
+    
+    from pyfock import Basis, Mol, Integrals
+    
+    status_text.text("Creating molecule object...")
+    progress_bar.progress(20)
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.xyz', delete=False) as f:
+        f.write(xyz_content)
+        xyz_file = f.name
+    
+    mol = Mol(coordfile=xyz_file)
+    
+    status_text.text(f"Loading basis set: {basis_set}...")
+    progress_bar.progress(30)
+    
+    basis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=basis_set)})
+    auxbasis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=auxbasis_set)})
+    
+    n_basis = basis.bfs_nao
+    st.info(f"✓ System has {n_basis} basis functions")
+    if n_basis > 40:
+        st.error(f"❌ This system has {n_basis} basis functions, exceeding the limit of 40. Please use a smaller basis set or fewer atoms.")
+        os.unlink(xyz_file)
         st.stop()
     
-    # Check if at least one integral type is selected
-    if not any([calc_overlap, calc_kinetic, calc_nuclear, calc_eri_4c2e, calc_eri_3c2e, calc_eri_2c2e]):
-        st.error("Please select at least one integral type to calculate!")
-        st.stop()
+    # Prepare results storage
+    results = {}
+    timings = {}
     
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    # Setup subset slice if needed
+    if use_subset:
+        subset_slice = [row_start, row_end, col_start, col_end]
+    else:
+        subset_slice = None
     
-    try:
-        status_text.text("Importing PyFock modules...")
-        progress_bar.progress(10)
-        
-        from pyfock import Basis, Mol, Integrals
-        
-        status_text.text("Creating molecule object...")
-        progress_bar.progress(20)
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.xyz', delete=False) as f:
-            f.write(xyz_content)
-            xyz_file = f.name
-        
-        mol = Mol(coordfile=xyz_file)
-        
-        status_text.text(f"Loading basis set: {basis_set}...")
-        progress_bar.progress(30)
-        
-        basis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=basis_set)})
-        
-        n_basis = basis.bfs_nao
-        st.info(f"✓ System has {n_basis} basis functions")
-        if n_basis > 50:
-            st.error(f"❌ This system has {n_basis} basis functions, exceeding the limit of 50. Please use a smaller basis set or fewer atoms.")
-            os.unlink(xyz_file)
-            st.stop()
-        
-        # Prepare results storage
-        results = {}
-        timings = {}
-        
-        # Setup subset slice if needed
-        if use_subset:
-            subset_slice = [row_start, row_end, col_start, col_end]
+    progress_step = 40
+    progress_increment = 50 / sum([calc_overlap, calc_kinetic, calc_nuclear, 
+                                    calc_eri_4c2e, calc_eri_3c2e, calc_eri_2c2e])
+    
+    # Calculate one-electron integrals
+    if calc_overlap:
+        status_text.text("Calculating overlap integrals...")
+        start = time.time()
+        if subset_slice:
+            S = Integrals.overlap_mat_symm(basis, slice=subset_slice)
         else:
-            subset_slice = None
+            S = Integrals.overlap_mat_symm(basis)
         
-        progress_step = 40
-        progress_increment = 50 / sum([calc_overlap, calc_kinetic, calc_nuclear, 
-                                       calc_eri_4c2e, calc_eri_3c2e, calc_eri_2c2e])
+        if use_spherical:
+            c2sph_mat = basis.cart2sph_basis()
+            S = np.dot(c2sph_mat, np.dot(S, c2sph_mat.T))
         
-        # Calculate one-electron integrals
-        if calc_overlap:
-            status_text.text("Calculating overlap integrals...")
-            start = time.time()
-            if subset_slice:
-                S = Integrals.overlap_mat_symm(basis, slice=subset_slice)
+        results['Overlap'] = S
+        timings['Overlap'] = time.time() - start
+        progress_step += progress_increment
+        progress_bar.progress(int(progress_step))
+    
+    if calc_kinetic:
+        status_text.text("Calculating kinetic energy integrals...")
+        start = time.time()
+        if subset_slice:
+            T = Integrals.kin_mat_symm(basis, slice=subset_slice)
+        else:
+            T = Integrals.kin_mat_symm(basis)
+        
+        if use_spherical:
+            c2sph_mat = basis.cart2sph_basis()
+            T = np.dot(c2sph_mat, np.dot(T, c2sph_mat.T))
+        
+        results['Kinetic'] = T
+        timings['Kinetic'] = time.time() - start
+        progress_step += progress_increment
+        progress_bar.progress(int(progress_step))
+    
+    if calc_nuclear:
+        status_text.text("Calculating nuclear attraction integrals...")
+        start = time.time()
+        if subset_slice:
+            V = Integrals.nuc_mat_symm(basis, mol, slice=subset_slice)
+        else:
+            V = Integrals.nuc_mat_symm(basis, mol)
+        
+        if use_spherical:
+            c2sph_mat = basis.cart2sph_basis()
+            V = np.dot(c2sph_mat, np.dot(V, c2sph_mat.T))
+        
+        results['Nuclear'] = V
+        timings['Nuclear'] = time.time() - start
+        progress_step += progress_increment
+        progress_bar.progress(int(progress_step))
+    
+    # Calculate two-electron integrals
+    if calc_eri_4c2e:
+        status_text.text("Calculating 4c2e integrals (this may take a while)...")
+        start = time.time()
+        ERI = Integrals.conv_4c2e_symm(basis)
+        timings['4c2e'] = time.time() - start
+        results['4c2e'] = ERI
+        
+        progress_step += progress_increment
+        progress_bar.progress(int(progress_step))
+    
+    if calc_eri_3c2e:
+        status_text.text("Calculating 3c2e integrals...")
+        start = time.time()
+        ERI_3c = Integrals.rys_3c2e_symm(basis, auxbasis)
+        results['3c2e'] = ERI_3c
+        timings['3c2e'] = time.time() - start
+        progress_step += progress_increment
+        progress_bar.progress(int(progress_step))
+    
+    if calc_eri_2c2e:
+        status_text.text("Calculating 2c2e integrals...")
+        start = time.time()
+        ERI_2c = Integrals.rys_2c2e_symm(basis)
+        results['2c2e'] = ERI_2c
+        timings['2c2e'] = time.time() - start
+        progress_step += progress_increment
+        progress_bar.progress(int(progress_step))
+    
+    progress_bar.progress(100)
+    status_text.text("✅ All calculations completed!")
+    
+    st.success("✅ Integral calculations completed successfully!")
+    
+    # Display results
+    st.header("3. Results")
+    
+    # Timing summary
+    st.subheader("Computation Times")
+    timing_cols = st.columns(len(timings))
+    for idx, (name, timing) in enumerate(timings.items()):
+        with timing_cols[idx]:
+            st.metric(name, f"{timing:.4f} s")
+    
+    st.markdown("---")
+    
+    # Display each integral type
+    for integral_name, integral_matrix in results.items():
+        st.subheader(f"{integral_name} Integrals")
+        
+        # Educational information
+        with st.expander(f"ℹ️ About {integral_name} Integrals"):
+            if integral_name == "Overlap":
+                st.markdown("""
+                **Overlap Integrals (S)**
+                
+                The overlap integral measures how much two basis functions overlap in space:
+                
+                $$S_{ij} = \\langle \\phi_i | \\phi_j \\rangle = \\int \\phi_i(\\mathbf{r}) \\phi_j(\\mathbf{r}) d\\mathbf{r}$$
+                
+                - Diagonal elements (Sᵢᵢ) equal 1 for normalized basis functions
+                - Off-diagonal elements indicate orbital overlap
+                - Essential for orthogonalization and transformation to orthonormal basis
+                - Used in Löwdin or canonical orthogonalization schemes
+                """)
+            elif integral_name == "Kinetic":
+                st.markdown("""
+                **Kinetic Energy Integrals (T)**
+                
+                Represents the kinetic energy operator in the basis function representation:
+                
+                $$T_{ij} = \\langle \\phi_i | -\\frac{1}{2}\\nabla^2 | \\phi_j \\rangle$$
+                
+                - Contains the electronic kinetic energy contribution
+                - Always positive (kinetic energy is positive definite)
+                - Diagonal elements are largest (self-kinetic energy)
+                - Critical for total electronic energy calculations
+                """)
+            elif integral_name == "Nuclear":
+                st.markdown("""
+                **Nuclear Attraction Integrals (V)**
+                
+                Represents electron-nuclear attraction energy:
+                
+                $$V_{ij} = \\langle \\phi_i | -\\sum_A \\frac{Z_A}{r_A} | \\phi_j \\rangle$$
+                
+                - Sum over all nuclei A with charge Zₐ
+                - Always negative (attractive interaction)
+                - Largest near nuclear positions
+                - Molecular geometry dependent
+                """)
+            elif integral_name == "4c2e":
+                st.markdown("""
+                **Four-Center Two-Electron Repulsion Integrals (ERI)**
+                
+                The most computationally expensive integrals in quantum chemistry:
+                
+                $$ERI_{ijkl} = \\langle \\phi_i \\phi_j | \\frac{1}{r_{12}} | \\phi_k \\phi_l \\rangle$$
+                
+                - Four-index tensor: scales as O(N⁴) with basis size
+                - Symmetries reduce unique elements: (ij|kl) = (ji|kl) = (ij|lk) = (kl|ij)
+                - Used for electron-electron repulsion (Coulomb and exchange)
+                """)
+            elif integral_name == "3c2e":
+                st.markdown("""
+                **Three-Center Two-Electron Integrals**
+                
+                Used in density fitting (RI) approximations:
+                
+                $$(\\phi_i \\phi_j | P)$$
+                
+                - Three indices instead of four
+                - Auxiliary basis function P
+                - Enables efficient approximation of 4c2e integrals
+                - Critical for linear-scaling DFT methods
+                """)
+            elif integral_name == "2c2e":
+                st.markdown("""
+                **Two-Center Two-Electron Integrals**
+                
+                Coulomb metric in auxiliary basis:
+                
+                $$(P | Q)$$
+                
+                - Two-index matrix
+                - Auxiliary basis only
+                - Used in density fitting inverse metric
+                - Much smaller than full ERI tensor
+                """)
+        
+        # Matrix visualization
+        col_a, col_b = st.columns([1.5, 1])
+        
+        with col_a:
+            st.markdown("**Matrix Visualization**")
+            
+            # Handle different dimensionalities
+            if len(integral_matrix.shape) == 2:
+                # 2D matrix (one-electron integrals or 2c2e)
+                fig = px.imshow(integral_matrix, 
+                                color_continuous_scale='RdBu_r',
+                                aspect='auto',
+                                labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Value'})
+                fig.update_layout(height=400, title=f"{integral_name} Matrix Heatmap")
+                st.plotly_chart(fig, use_container_width=True)
+                
+            elif len(integral_matrix.shape) == 3:
+                # 3D tensor (3c2e)
+                st.info("3D tensor - showing slice along first auxiliary basis index")
+                slice_idx = st.slider(f"Auxiliary basis index:", 0, integral_matrix.shape[0]-1, 0)
+                fig = px.imshow(integral_matrix[slice_idx], 
+                                color_continuous_scale='RdBu_r',
+                                aspect='auto',
+                                labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Value'})
+                fig.update_layout(height=400, title=f"{integral_name} Matrix (Slice {slice_idx})")
+                st.plotly_chart(fig, use_container_width=True)
+                
+            elif len(integral_matrix.shape) == 4:
+                # 4D tensor (4c2e)
+                st.info("4D tensor - showing 2D slice")
+                col_s1, col_s2 = st.columns(2)
+                with col_s1:
+                    k_idx = st.slider("Index k:", 0, integral_matrix.shape[2]-1, 0, key='k_idx')
+                with col_s2:
+                    l_idx = st.slider("Index l:", 0, integral_matrix.shape[3]-1, 0, key='l_idx')
+                
+                fig = px.imshow(integral_matrix[:, :, k_idx, l_idx],
+                                color_continuous_scale='RdBu_r',
+                                aspect='auto',
+                                labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Value'})
+                fig.update_layout(height=400, title=f"{integral_name} Matrix (k={k_idx}, l={l_idx})")
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col_b:
+            st.markdown("**Matrix Statistics**")
+            
+            # Calculate statistics based on dimensionality
+            if len(integral_matrix.shape) == 2:
+                mat_stats = {
+                    "Shape": f"{integral_matrix.shape[0]} × {integral_matrix.shape[1]}",
+                    "Max Value": f"{np.max(integral_matrix):.6e}",
+                    "Min Value": f"{np.min(integral_matrix):.6e}",
+                    "Mean": f"{np.mean(integral_matrix):.6e}",
+                    "Std Dev": f"{np.std(integral_matrix):.6e}",
+                    "Frobenius Norm": f"{np.linalg.norm(integral_matrix):.6e}"
+                }
+                
+                # Check symmetry for 2D matrices
+                if integral_matrix.shape[0] == integral_matrix.shape[1]:
+                    symmetry_error = np.max(np.abs(integral_matrix - integral_matrix.T))
+                    mat_stats["Symmetry Error"] = f"{symmetry_error:.6e}"
+                    
+                    # Check if matrix is positive definite (for overlap)
+                    if integral_name == "Overlap":
+                        eigenvalues = np.linalg.eigvalsh(integral_matrix)
+                        mat_stats["Min Eigenvalue"] = f"{np.min(eigenvalues):.6e}"
+                        mat_stats["Condition Number"] = f"{np.max(eigenvalues)/np.min(eigenvalues):.2e}"
+                
+            elif len(integral_matrix.shape) == 3:
+                mat_stats = {
+                    "Shape": f"{integral_matrix.shape[0]} × {integral_matrix.shape[1]} × {integral_matrix.shape[2]}",
+                    "Total Elements": f"{integral_matrix.size:,}",
+                    "Max Value": f"{np.max(integral_matrix):.6e}",
+                    "Min Value": f"{np.min(integral_matrix):.6e}",
+                    "Mean": f"{np.mean(integral_matrix):.6e}",
+                    "Memory": f"{integral_matrix.nbytes / 1024:.2f} KB"
+                }
+                
+            elif len(integral_matrix.shape) == 4:
+                mat_stats = {
+                    "Shape": f"{integral_matrix.shape[0]} × {integral_matrix.shape[1]} × {integral_matrix.shape[2]} × {integral_matrix.shape[3]}",
+                    "Total Elements": f"{integral_matrix.size:,}",
+                    "Max Value": f"{np.max(integral_matrix):.6e}",
+                    "Min Value": f"{np.min(integral_matrix):.6e}",
+                    "Mean": f"{np.mean(integral_matrix):.6e}",
+                    "Memory": f"{integral_matrix.nbytes / (1024*1024):.2f} MB"
+                }
+                
+                # Note about 8-fold symmetry
+                st.info("**Symmetry**: ERI tensor has 8-fold permutational symmetry")
+            
+            for key, value in mat_stats.items():
+                st.write(f"**{key}:** {value}")
+        
+        # Matrix data table (expandable)
+        with st.expander(f"📊 View {integral_name} Matrix Data"):
+            if len(integral_matrix.shape) == 2:
+                df = pd.DataFrame(integral_matrix)
+                df.columns = [f"j={i}" for i in range(df.shape[1])]
+                df.index = [f"i={i}" for i in range(df.shape[0])]
+                st.dataframe(df, use_container_width=True, height=400)
             else:
-                S = Integrals.overlap_mat_symm(basis)
-            
-            if use_spherical:
-                c2sph_mat = basis.cart2sph_basis()
-                S = np.dot(c2sph_mat, np.dot(S, c2sph_mat.T))
-            
-            results['Overlap'] = S
-            timings['Overlap'] = time.time() - start
-            progress_step += progress_increment
-            progress_bar.progress(int(progress_step))
+                st.write(f"Shape: {integral_matrix.shape}")
+                st.write("Full tensor too large to display as table. Use visualization above.")
+                
+                # Option to view specific elements
+                st.markdown("**Query Specific Element:**")
+                if len(integral_matrix.shape) == 3:
+                    col_q1, col_q2, col_q3 = st.columns(3)
+                    with col_q1:
+                        q_i = st.number_input("Index i:", 0, integral_matrix.shape[0]-1, 0, key=f"q_i_{integral_name}")
+                    with col_q2:
+                        q_j = st.number_input("Index j:", 0, integral_matrix.shape[1]-1, 0, key=f"q_j_{integral_name}")
+                    with col_q3:
+                        q_k = st.number_input("Index k:", 0, integral_matrix.shape[2]-1, 0, key=f"q_k_{integral_name}")
+                    st.write(f"**Value [{q_i},{q_j},{q_k}]:** {integral_matrix[q_i, q_j, q_k]:.8e}")
+                
+                elif len(integral_matrix.shape) == 4:
+                    col_q1, col_q2, col_q3, col_q4 = st.columns(4)
+                    with col_q1:
+                        q_i = st.number_input("Index i:", 0, integral_matrix.shape[0]-1, 0, key=f"q_i_{integral_name}")
+                    with col_q2:
+                        q_j = st.number_input("Index j:", 0, integral_matrix.shape[1]-1, 0, key=f"q_j_{integral_name}")
+                    with col_q3:
+                        q_k = st.number_input("Index k:", 0, integral_matrix.shape[2]-1, 0, key=f"q_k_{integral_name}")
+                    with col_q4:
+                        q_l = st.number_input("Index l:", 0, integral_matrix.shape[3]-1, 0, key=f"q_l_{integral_name}")
+                    st.write(f"**Value [{q_i},{q_j},{q_k},{q_l}]:** {integral_matrix[q_i, q_j, q_k, q_l]:.8e}")
         
-        if calc_kinetic:
-            status_text.text("Calculating kinetic energy integrals...")
-            start = time.time()
-            if subset_slice:
-                T = Integrals.kin_mat_symm(basis, slice=subset_slice)
-            else:
-                T = Integrals.kin_mat_symm(basis)
-            
-            if use_spherical:
-                c2sph_mat = basis.cart2sph_basis()
-                T = np.dot(c2sph_mat, np.dot(T, c2sph_mat.T))
-            
-            results['Kinetic'] = T
-            timings['Kinetic'] = time.time() - start
-            progress_step += progress_increment
-            progress_bar.progress(int(progress_step))
-        
-        if calc_nuclear:
-            status_text.text("Calculating nuclear attraction integrals...")
-            start = time.time()
-            if subset_slice:
-                V = Integrals.nuc_mat_symm(basis, mol, slice=subset_slice)
-            else:
-                V = Integrals.nuc_mat_symm(basis, mol)
-            
-            if use_spherical:
-                c2sph_mat = basis.cart2sph_basis()
-                V = np.dot(c2sph_mat, np.dot(V, c2sph_mat.T))
-            
-            results['Nuclear'] = V
-            timings['Nuclear'] = time.time() - start
-            progress_step += progress_increment
-            progress_bar.progress(int(progress_step))
-        
-        # Calculate two-electron integrals
-        if calc_eri_4c2e:
-            if eri_algorithm == "Rys Quadrature (Fast)":
-                status_text.text("Calculating 4c2e integrals (Rys quadrature)...")
-                start = time.time()
-                ERI = Integrals.rys_4c2e_symm(basis)
-                timings['4c2e (Rys)'] = time.time() - start
-                results['4c2e'] = ERI
-            else:
-                status_text.text("Calculating 4c2e integrals (Conventional - this may take a while)...")
-                start = time.time()
-                ERI = Integrals.conv_4c2e_symm(basis)
-                timings['4c2e (Conv)'] = time.time() - start
-                results['4c2e'] = ERI
-            
-            progress_step += progress_increment
-            progress_bar.progress(int(progress_step))
-        
-        if calc_eri_3c2e:
-            status_text.text("Calculating 3c2e integrals...")
-            start = time.time()
-            ERI_3c = Integrals.rys_3c2e_symm(basis)
-            results['3c2e'] = ERI_3c
-            timings['3c2e'] = time.time() - start
-            progress_step += progress_increment
-            progress_bar.progress(int(progress_step))
-        
-        if calc_eri_2c2e:
-            status_text.text("Calculating 2c2e integrals...")
-            start = time.time()
-            ERI_2c = Integrals.rys_2c2e_symm(basis)
-            results['2c2e'] = ERI_2c
-            timings['2c2e'] = time.time() - start
-            progress_step += progress_increment
-            progress_bar.progress(int(progress_step))
-        
-        progress_bar.progress(100)
-        status_text.text("✅ All calculations completed!")
-        
-        st.success("✅ Integral calculations completed successfully!")
-        
-        # Display results
-        st.header("3. Results")
-        
-        # Timing summary
-        st.subheader("Computation Times")
-        timing_cols = st.columns(len(timings))
-        for idx, (name, timing) in enumerate(timings.items()):
-            with timing_cols[idx]:
-                st.metric(name, f"{timing:.4f} s")
         
         st.markdown("---")
+    
+    # Educational insights section
+    if calc_overlap and calc_kinetic and calc_nuclear:
+        st.header("4. Educational Insights")
         
-        # Display each integral type
-        for integral_name, integral_matrix in results.items():
-            st.subheader(f"{integral_name} Integrals")
-            
-            # Educational information
-            with st.expander(f"ℹ️ About {integral_name} Integrals"):
-                if integral_name == "Overlap":
-                    st.markdown("""
-                    **Overlap Integrals (S)**
-                    
-                    The overlap integral measures how much two basis functions overlap in space:
-                    
-                    $$S_{ij} = \\langle \\phi_i | \\phi_j \\rangle = \\int \\phi_i(\\mathbf{r}) \\phi_j(\\mathbf{r}) d\\mathbf{r}$$
-                    
-                    - Diagonal elements (Sᵢᵢ) equal 1 for normalized basis functions
-                    - Off-diagonal elements indicate orbital overlap
-                    - Essential for orthogonalization and transformation to orthonormal basis
-                    - Used in Löwdin or canonical orthogonalization schemes
-                    """)
-                elif integral_name == "Kinetic":
-                    st.markdown("""
-                    **Kinetic Energy Integrals (T)**
-                    
-                    Represents the kinetic energy operator in the basis function representation:
-                    
-                    $$T_{ij} = \\langle \\phi_i | -\\frac{1}{2}\\nabla^2 | \\phi_j \\rangle$$
-                    
-                    - Contains the electronic kinetic energy contribution
-                    - Always positive (kinetic energy is positive definite)
-                    - Diagonal elements are largest (self-kinetic energy)
-                    - Critical for total electronic energy calculations
-                    """)
-                elif integral_name == "Nuclear":
-                    st.markdown("""
-                    **Nuclear Attraction Integrals (V)**
-                    
-                    Represents electron-nuclear attraction energy:
-                    
-                    $$V_{ij} = \\langle \\phi_i | -\\sum_A \\frac{Z_A}{r_A} | \\phi_j \\rangle$$
-                    
-                    - Sum over all nuclei A with charge Zₐ
-                    - Always negative (attractive interaction)
-                    - Largest near nuclear positions
-                    - Molecular geometry dependent
-                    """)
-                elif integral_name == "4c2e":
-                    st.markdown("""
-                    **Four-Center Two-Electron Repulsion Integrals (ERI)**
-                    
-                    The most computationally expensive integrals in quantum chemistry:
-                    
-                    $$ERI_{ijkl} = \\langle \\phi_i \\phi_j | \\frac{1}{r_{12}} | \\phi_k \\phi_l \\rangle$$
-                    
-                    - Four-index tensor: scales as O(N⁴) with basis size
-                    - Symmetries reduce unique elements: (ij|kl) = (ji|kl) = (ij|lk) = (kl|ij)
-                    - Used for electron-electron repulsion (Coulomb and exchange)
-                    - **Rys quadrature** significantly faster than conventional evaluation
-                    """)
-                elif integral_name == "3c2e":
-                    st.markdown("""
-                    **Three-Center Two-Electron Integrals**
-                    
-                    Used in density fitting (RI) approximations:
-                    
-                    $$(\\phi_i \\phi_j | P)$$
-                    
-                    - Three indices instead of four
-                    - Auxiliary basis function P
-                    - Enables efficient approximation of 4c2e integrals
-                    - Critical for linear-scaling DFT methods
-                    """)
-                elif integral_name == "2c2e":
-                    st.markdown("""
-                    **Two-Center Two-Electron Integrals**
-                    
-                    Coulomb metric in auxiliary basis:
-                    
-                    $$(P | Q)$$
-                    
-                    - Two-index matrix
-                    - Auxiliary basis only
-                    - Used in density fitting inverse metric
-                    - Much smaller than full ERI tensor
-                    """)
-            
-            # Matrix visualization
-            col_a, col_b = st.columns([1.5, 1])
-            
-            with col_a:
-                st.markdown("**Matrix Visualization**")
-                
-                # Handle different dimensionalities
-                if len(integral_matrix.shape) == 2:
-                    # 2D matrix (one-electron integrals or 2c2e)
-                    fig = px.imshow(integral_matrix, 
-                                   color_continuous_scale='RdBu_r',
-                                   aspect='auto',
-                                   labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Value'})
-                    fig.update_layout(height=400, title=f"{integral_name} Matrix Heatmap")
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                elif len(integral_matrix.shape) == 3:
-                    # 3D tensor (3c2e)
-                    st.info("3D tensor - showing slice along first auxiliary basis index")
-                    slice_idx = st.slider(f"Auxiliary basis index:", 0, integral_matrix.shape[0]-1, 0)
-                    fig = px.imshow(integral_matrix[slice_idx], 
-                                   color_continuous_scale='RdBu_r',
-                                   aspect='auto',
-                                   labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Value'})
-                    fig.update_layout(height=400, title=f"{integral_name} Matrix (Slice {slice_idx})")
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                elif len(integral_matrix.shape) == 4:
-                    # 4D tensor (4c2e)
-                    st.info("4D tensor - showing 2D slice")
-                    col_s1, col_s2 = st.columns(2)
-                    with col_s1:
-                        k_idx = st.slider("Index k:", 0, integral_matrix.shape[2]-1, 0, key='k_idx')
-                    with col_s2:
-                        l_idx = st.slider("Index l:", 0, integral_matrix.shape[3]-1, 0, key='l_idx')
-                    
-                    fig = px.imshow(integral_matrix[:, :, k_idx, l_idx],
-                                   color_continuous_scale='RdBu_r',
-                                   aspect='auto',
-                                   labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Value'})
-                    fig.update_layout(height=400, title=f"{integral_name} Matrix (k={k_idx}, l={l_idx})")
-                    st.plotly_chart(fig, use_container_width=True)
-            
-            with col_b:
-                st.markdown("**Matrix Statistics**")
-                
-                # Calculate statistics based on dimensionality
-                if len(integral_matrix.shape) == 2:
-                    mat_stats = {
-                        "Shape": f"{integral_matrix.shape[0]} × {integral_matrix.shape[1]}",
-                        "Max Value": f"{np.max(integral_matrix):.6e}",
-                        "Min Value": f"{np.min(integral_matrix):.6e}",
-                        "Mean": f"{np.mean(integral_matrix):.6e}",
-                        "Std Dev": f"{np.std(integral_matrix):.6e}",
-                        "Frobenius Norm": f"{np.linalg.norm(integral_matrix):.6e}"
-                    }
-                    
-                    # Check symmetry for 2D matrices
-                    if integral_matrix.shape[0] == integral_matrix.shape[1]:
-                        symmetry_error = np.max(np.abs(integral_matrix - integral_matrix.T))
-                        mat_stats["Symmetry Error"] = f"{symmetry_error:.6e}"
-                        
-                        # Check if matrix is positive definite (for overlap)
-                        if integral_name == "Overlap":
-                            eigenvalues = np.linalg.eigvalsh(integral_matrix)
-                            mat_stats["Min Eigenvalue"] = f"{np.min(eigenvalues):.6e}"
-                            mat_stats["Condition Number"] = f"{np.max(eigenvalues)/np.min(eigenvalues):.2e}"
-                    
-                elif len(integral_matrix.shape) == 3:
-                    mat_stats = {
-                        "Shape": f"{integral_matrix.shape[0]} × {integral_matrix.shape[1]} × {integral_matrix.shape[2]}",
-                        "Total Elements": f"{integral_matrix.size:,}",
-                        "Max Value": f"{np.max(integral_matrix):.6e}",
-                        "Min Value": f"{np.min(integral_matrix):.6e}",
-                        "Mean": f"{np.mean(integral_matrix):.6e}",
-                        "Memory": f"{integral_matrix.nbytes / 1024:.2f} KB"
-                    }
-                    
-                elif len(integral_matrix.shape) == 4:
-                    mat_stats = {
-                        "Shape": f"{integral_matrix.shape[0]} × {integral_matrix.shape[1]} × {integral_matrix.shape[2]} × {integral_matrix.shape[3]}",
-                        "Total Elements": f"{integral_matrix.size:,}",
-                        "Max Value": f"{np.max(integral_matrix):.6e}",
-                        "Min Value": f"{np.min(integral_matrix):.6e}",
-                        "Mean": f"{np.mean(integral_matrix):.6e}",
-                        "Memory": f"{integral_matrix.nbytes / (1024*1024):.2f} MB"
-                    }
-                    
-                    # Note about 8-fold symmetry
-                    st.info("**Symmetry**: ERI tensor has 8-fold permutational symmetry")
-                
-                for key, value in mat_stats.items():
-                    st.write(f"**{key}:** {value}")
-            
-            # Matrix data table (expandable)
-            with st.expander(f"📊 View {integral_name} Matrix Data"):
-                if len(integral_matrix.shape) == 2:
-                    df = pd.DataFrame(integral_matrix)
-                    df.columns = [f"j={i}" for i in range(df.shape[1])]
-                    df.index = [f"i={i}" for i in range(df.shape[0])]
-                    st.dataframe(df, use_container_width=True, height=400)
-                else:
-                    st.write(f"Shape: {integral_matrix.shape}")
-                    st.write("Full tensor too large to display as table. Use visualization above.")
-                    
-                    # Option to view specific elements
-                    st.markdown("**Query Specific Element:**")
-                    if len(integral_matrix.shape) == 3:
-                        col_q1, col_q2, col_q3 = st.columns(3)
-                        with col_q1:
-                            q_i = st.number_input("Index i:", 0, integral_matrix.shape[0]-1, 0, key=f"q_i_{integral_name}")
-                        with col_q2:
-                            q_j = st.number_input("Index j:", 0, integral_matrix.shape[1]-1, 0, key=f"q_j_{integral_name}")
-                        with col_q3:
-                            q_k = st.number_input("Index k:", 0, integral_matrix.shape[2]-1, 0, key=f"q_k_{integral_name}")
-                        st.write(f"**Value [{q_i},{q_j},{q_k}]:** {integral_matrix[q_i, q_j, q_k]:.8e}")
-                    
-                    elif len(integral_matrix.shape) == 4:
-                        col_q1, col_q2, col_q3, col_q4 = st.columns(4)
-                        with col_q1:
-                            q_i = st.number_input("Index i:", 0, integral_matrix.shape[0]-1, 0, key=f"q_i_{integral_name}")
-                        with col_q2:
-                            q_j = st.number_input("Index j:", 0, integral_matrix.shape[1]-1, 0, key=f"q_j_{integral_name}")
-                        with col_q3:
-                            q_k = st.number_input("Index k:", 0, integral_matrix.shape[2]-1, 0, key=f"q_k_{integral_name}")
-                        with col_q4:
-                            q_l = st.number_input("Index l:", 0, integral_matrix.shape[3]-1, 0, key=f"q_l_{integral_name}")
-                        st.write(f"**Value [{q_i},{q_j},{q_k},{q_l}]:** {integral_matrix[q_i, q_j, q_k, q_l]:.8e}")
-            
-            # Download option
-            if len(integral_matrix.shape) == 2:
-                csv_data = pd.DataFrame(integral_matrix).to_csv(index=False)
-                st.download_button(
-                    label=f"💾 Download {integral_name} Matrix (CSV)",
-                    data=csv_data,
-                    file_name=f"{integral_name.lower()}_integrals.csv",
-                    mime="text/csv"
-                )
-            else:
-                # For higher dimensional arrays, save as numpy
-                import io
-                buf = io.BytesIO()
-                np.save(buf, integral_matrix)
-                buf.seek(0)
-                st.download_button(
-                    label=f"💾 Download {integral_name} Tensor (NumPy)",
-                    data=buf,
-                    file_name=f"{integral_name.lower()}_integrals.npy",
-                    mime="application/octet-stream"
-                )
-            
-            st.markdown("---")
+        st.subheader("Core Hamiltonian Matrix (H_core)")
+        st.markdown("""
+        The core Hamiltonian combines kinetic and nuclear attraction integrals:
         
-        # Educational insights section
-        if calc_overlap and calc_kinetic and calc_nuclear:
-            st.header("4. Educational Insights")
-            
-            st.subheader("Core Hamiltonian Matrix (H_core)")
-            st.markdown("""
-            The core Hamiltonian combines kinetic and nuclear attraction integrals:
-            
-            $H^{\\text{core}}_{ij} = T_{ij} + V_{ij}$
-            
-            This represents the one-electron part of the Hamiltonian in the Hartree-Fock and DFT methods.
-            """)
-            
-            H_core = results['Kinetic'] + results['Nuclear']
-            
-            col_h1, col_h2 = st.columns([1.5, 1])
-            
-            with col_h1:
-                fig = px.imshow(H_core,
-                               color_continuous_scale='RdBu_r',
-                               aspect='auto',
-                               labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Energy (Ha)'})
-                fig.update_layout(height=400, title="Core Hamiltonian Matrix")
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col_h2:
-                st.markdown("**Properties:**")
-                eigenvalues = np.linalg.eigvalsh(H_core)
-                st.write(f"**Lowest eigenvalue:** {np.min(eigenvalues):.6f} Ha")
-                st.write(f"**Highest eigenvalue:** {np.max(eigenvalues):.6f} Ha")
-                st.write(f"**Energy range:** {np.max(eigenvalues) - np.min(eigenvalues):.6f} Ha")
-                
-                # Eigenvalue distribution
-                fig_eig = go.Figure()
-                fig_eig.add_trace(go.Scatter(
-                    x=list(range(len(eigenvalues))),
-                    y=eigenvalues * 27.2114,  # Convert to eV
-                    mode='markers+lines',
-                    name='Eigenvalues'
-                ))
-                fig_eig.update_layout(
-                    title="Core Hamiltonian Eigenvalues",
-                    xaxis_title="Index",
-                    yaxis_title="Energy (eV)",
-                    height=300
-                )
-                st.plotly_chart(fig_eig, use_container_width=True)
+        $H^{\\text{core}}_{ij} = T_{ij} + V_{ij}$
         
-        # Cleanup
-        os.unlink(xyz_file)
+        This represents the one-electron part of the Hamiltonian in the Hartree-Fock and DFT methods.
+        """)
         
-    except ImportError as e:
-        st.error(f"❌ Import Error: {str(e)}")
-        st.info("Make sure PyFock is installed: `pip install pyfock`")
-        progress_bar.empty()
-        status_text.empty()
-    except Exception as e:
-        st.error(f"❌ Calculation failed: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
-        progress_bar.empty()
-        status_text.empty()
+        H_core = results['Kinetic'] + results['Nuclear']
         
-        if 'xyz_file' in locals():
-            try:
-                os.unlink(xyz_file)
-            except:
-                pass
+        col_h1, col_h2 = st.columns([1.5, 1])
+        
+        with col_h1:
+            fig = px.imshow(H_core,
+                            color_continuous_scale='RdBu_r',
+                            aspect='auto',
+                            labels={'x': 'Basis Function j', 'y': 'Basis Function i', 'color': 'Energy (Ha)'})
+            fig.update_layout(height=400, title="Core Hamiltonian Matrix")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col_h2:
+            st.markdown("**Properties:**")
+            eigenvalues = np.linalg.eigvalsh(H_core)
+            st.write(f"**Lowest eigenvalue:** {np.min(eigenvalues):.6f} Ha")
+            st.write(f"**Highest eigenvalue:** {np.max(eigenvalues):.6f} Ha")
+            st.write(f"**Energy range:** {np.max(eigenvalues) - np.min(eigenvalues):.6f} Ha")
+            
+            # Eigenvalue distribution
+            fig_eig = go.Figure()
+            fig_eig.add_trace(go.Scatter(
+                x=list(range(len(eigenvalues))),
+                y=eigenvalues * 27.2114,  # Convert to eV
+                mode='markers+lines',
+                name='Eigenvalues'
+            ))
+            fig_eig.update_layout(
+                title="Core Hamiltonian Eigenvalues",
+                xaxis_title="Index",
+                yaxis_title="Energy (eV)",
+                height=300
+            )
+            st.plotly_chart(fig_eig, use_container_width=True)
+    
+    # Cleanup
+    os.unlink(xyz_file)
+    
+except ImportError as e:
+    st.error(f"❌ Import Error: {str(e)}")
+    st.info("Make sure PyFock is installed: `pip install pyfock`")
+    progress_bar.empty()
+    status_text.empty()
+except Exception as e:
+    st.error(f"❌ Calculation failed: {str(e)}")
+    import traceback
+    st.code(traceback.format_exc())
+    progress_bar.empty()
+    status_text.empty()
+    
+    if 'xyz_file' in locals():
+        try:
+            os.unlink(xyz_file)
+        except:
+            pass
 
-else:
-    # Initial instructions
-    st.info("👆 Configure your molecule and select integrals to calculate above!")
-    
-    st.markdown("""
-    ### About Molecular Integrals
-    
-    Molecular integrals are the fundamental building blocks of quantum chemistry calculations. This tool allows you to:
-    
-    1. **Calculate different types of integrals** - from simple overlap to complex four-center electron repulsion integrals
-    2. **Visualize integral matrices** - see the structure and patterns in the data
-    3. **Learn quantum chemistry** - educational explanations for each integral type
-    4. **Compare algorithms** - see the performance difference between Rys quadrature and conventional methods
-    5. **Export results** - download matrices for further analysis
-    
-    ### Types of Integrals
-    
-    **One-Electron Integrals:**
-    - **Overlap (S)**: Measures basis function overlap
-    - **Kinetic (T)**: Electronic kinetic energy
-    - **Nuclear (V)**: Electron-nuclear attraction
-    
-    **Two-Electron Integrals:**
-    - **4c2e (ERI)**: Four-center electron repulsion - the most computationally intensive
-    - **3c2e**: Three-center integrals for density fitting
-    - **2c2e**: Two-center auxiliary basis integrals
-    
-    ### Performance Tips
-    
-    - Start with small molecules and minimal basis sets (sto-3g)
-    - Use **Rys quadrature** for 4c2e integrals (much faster!)
-    - 4c2e integrals scale as O(N⁴) - they become very large quickly
-    - Consider using subsets for exploration of large systems
-    
-    ### Educational Use
-    
-    This tool is perfect for:
-    - Learning how basis functions interact
-    - Understanding the structure of integral matrices
-    - Exploring symmetries in quantum chemistry
-    - Teaching computational chemistry concepts
-    - Comparing different computational methods
-    """)
+
+# Initial instructions
+st.info("👆 Configure your molecule and select integrals to calculate above!")
+
+st.markdown("""
+### About Molecular Integrals
+
+Molecular integrals are the fundamental building blocks of quantum chemistry calculations. This tool allows you to:
+
+1. **Calculate different types of integrals** - from simple overlap to complex four-center electron repulsion integrals
+2. **Visualize integral matrices** - see the structure and patterns in the data
+3. **Learn quantum chemistry** - educational explanations for each integral type
+4. **Export results** - download matrices for further analysis
+
+### Types of Integrals
+
+**One-Electron Integrals:**
+- **Overlap (S)**: Measures basis function overlap
+- **Kinetic (T)**: Electronic kinetic energy
+- **Nuclear (V)**: Electron-nuclear attraction
+
+**Two-Electron Integrals:**
+- **4c2e (ERI)**: Four-center electron repulsion - the most computationally intensive
+- **3c2e**: Three-center integrals for density fitting
+- **2c2e**: Two-center auxiliary basis integrals
+
+### Performance Tips
+
+- Start with small molecules and minimal basis sets (sto-3g)
+- 4c2e integrals scale as O(N⁴) - they become very large quickly
+- Consider using subsets for exploration of large systems
+
+### Educational Use
+
+This tool is perfect for:
+- Learning how basis functions interact
+- Understanding the structure of integral matrices
+- Exploring symmetries in quantum chemistry
+- Teaching computational chemistry concepts
+- Comparing different computational methods
+""")
 
 # Footer
 st.markdown("---")
