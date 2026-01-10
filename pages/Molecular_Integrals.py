@@ -13,6 +13,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
+@st.cache_data
+def load_4c2e_eri(_basis):
+    ERI = Integrals.conv_4c2e_symm(basis)
+    return ERI
+
 # Set page configuration
 st.set_page_config(
     page_title='PyFock GUI - Molecular Integrals',
@@ -86,6 +91,7 @@ st.sidebar.markdown("""
 * Compare with PySCF
 * Download cube files & scripts
 * Interactive 3D visualization
+* Calculate molecular integrals
 * No installation required!
 """)
 
@@ -144,6 +150,16 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("*Made with PyFock by PhysWhiz*")
 st.sidebar.markdown("*Pure Python • Numba JIT • GPU Ready*")
 
+
+# Initialize session state
+if 'results' not in st.session_state:
+    st.session_state.results = None
+if 'timings' not in st.session_state:
+    st.session_state.timings = None
+if 'n_basis' not in st.session_state:
+    st.session_state.n_basis = None
+if 'calculation_done' not in st.session_state:
+    st.session_state.calculation_done = False
 # Helper functions
 def _parse_xyz_to_atoms(xyz_text):
     return ase_read(StringIO(xyz_text), format='xyz')
@@ -325,7 +341,7 @@ with col1:
     basis_set = st.selectbox("Basis Set:", BASIS_SETS, index=0)
     auxbasis_set = st.selectbox("Basis Set:", AUXBASIS_SETS, index=0)
     use_spherical = st.checkbox("Convert to Spherical AOs (SAO)", value=False, 
-                                help="Convert integrals from Cartesian AOs (CAO) to Spherical AOs (SAO)")
+                                help="Convert 1e integrals from Cartesian AOs (CAO) to Spherical AOs (SAO)")
 
 st.markdown("---")
 
@@ -386,135 +402,171 @@ if not any([calc_overlap, calc_kinetic, calc_nuclear, calc_eri_4c2e, calc_eri_3c
     st.error("Please select at least one integral type to calculate!")
     st.stop()
 
-progress_bar = st.progress(0)
-status_text = st.empty()
 
-try:
-    status_text.text("Importing PyFock modules...")
-    progress_bar.progress(10)
-    
-    from pyfock import Basis, Mol, Integrals
-    
-    status_text.text("Creating molecule object...")
-    progress_bar.progress(20)
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.xyz', delete=False) as f:
-        f.write(xyz_content)
-        xyz_file = f.name
-    
-    mol = Mol(coordfile=xyz_file)
-    
-    status_text.text(f"Loading basis set: {basis_set}...")
-    progress_bar.progress(30)
-    
-    basis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=basis_set)})
-    auxbasis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=auxbasis_set)})
-    
-    n_basis = basis.bfs_nao
-    st.info(f"✓ System has {n_basis} basis functions")
-    if n_basis > 40:
-        st.error(f"❌ This system has {n_basis} basis functions, exceeding the limit of 40. Please use a smaller basis set or fewer atoms.")
-        os.unlink(xyz_file)
-        st.stop()
-    
-    # Prepare results storage
-    results = {}
-    timings = {}
-    
-    # Setup subset slice if needed
-    if use_subset:
-        subset_slice = [row_start, row_end, col_start, col_end]
-    else:
-        subset_slice = None
-    
-    progress_step = 40
-    progress_increment = 50 / sum([calc_overlap, calc_kinetic, calc_nuclear, 
-                                    calc_eri_4c2e, calc_eri_3c2e, calc_eri_2c2e])
-    
-    # Calculate one-electron integrals
-    if calc_overlap:
-        status_text.text("Calculating overlap integrals...")
-        start = time.time()
-        if subset_slice:
-            S = Integrals.overlap_mat_symm(basis, slice=subset_slice)
+# Calculate button
+if st.button("🧮 Calculate Integrals", type="primary", use_container_width=True):
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    try:
+        status_text.text("Importing PyFock modules...")
+        progress_bar.progress(10)
+        
+        from pyfock import Basis, Mol, Integrals
+        
+        status_text.text("Creating molecule object...")
+        progress_bar.progress(20)
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.xyz', delete=False) as f:
+            f.write(xyz_content)
+            xyz_file = f.name
+        
+        mol = Mol(coordfile=xyz_file)
+        
+        status_text.text(f"Loading basis set: {basis_set}...")
+        progress_bar.progress(30)
+        
+        basis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=basis_set)})
+        auxbasis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=auxbasis_set)})
+        
+        n_basis = basis.bfs_nao
+        st.info(f"✓ System has {n_basis} basis functions")
+        if n_basis > 40:
+            st.error(f"❌ This system has {n_basis} basis functions, exceeding the limit of 40. Please use a smaller basis set or fewer atoms.")
+            os.unlink(xyz_file)
+            st.stop()
+        
+        # Prepare results storage
+        results = {}
+        timings = {}
+        
+        # Setup subset slice if needed
+        if use_subset:
+            subset_slice = [row_start, row_end, col_start, col_end]
         else:
-            S = Integrals.overlap_mat_symm(basis)
+            subset_slice = None
         
-        if use_spherical:
-            c2sph_mat = basis.cart2sph_basis()
-            S = np.dot(c2sph_mat, np.dot(S, c2sph_mat.T))
+        progress_step = 40
+        progress_increment = 50 / sum([calc_overlap, calc_kinetic, calc_nuclear, 
+                                        calc_eri_4c2e, calc_eri_3c2e, calc_eri_2c2e])
         
-        results['Overlap'] = S
-        timings['Overlap'] = time.time() - start
-        progress_step += progress_increment
-        progress_bar.progress(int(progress_step))
-    
-    if calc_kinetic:
-        status_text.text("Calculating kinetic energy integrals...")
-        start = time.time()
-        if subset_slice:
-            T = Integrals.kin_mat_symm(basis, slice=subset_slice)
-        else:
-            T = Integrals.kin_mat_symm(basis)
+        # Calculate one-electron integrals
+        if calc_overlap:
+            status_text.text("Calculating overlap integrals...")
+            start = time.time()
+            if subset_slice:
+                S = Integrals.overlap_mat_symm(basis, slice=subset_slice)
+            else:
+                S = Integrals.overlap_mat_symm(basis)
+            
+            if use_spherical:
+                c2sph_mat = basis.cart2sph_basis()
+                S = np.dot(c2sph_mat, np.dot(S, c2sph_mat.T))
+            
+            results['Overlap'] = S
+            timings['Overlap'] = time.time() - start
+            progress_step += progress_increment
+            progress_bar.progress(int(progress_step))
         
-        if use_spherical:
-            c2sph_mat = basis.cart2sph_basis()
-            T = np.dot(c2sph_mat, np.dot(T, c2sph_mat.T))
+        if calc_kinetic:
+            status_text.text("Calculating kinetic energy integrals...")
+            start = time.time()
+            if subset_slice:
+                T = Integrals.kin_mat_symm(basis, slice=subset_slice)
+            else:
+                T = Integrals.kin_mat_symm(basis)
+            
+            if use_spherical:
+                c2sph_mat = basis.cart2sph_basis()
+                T = np.dot(c2sph_mat, np.dot(T, c2sph_mat.T))
+            
+            results['Kinetic'] = T
+            timings['Kinetic'] = time.time() - start
+            progress_step += progress_increment
+            progress_bar.progress(int(progress_step))
         
-        results['Kinetic'] = T
-        timings['Kinetic'] = time.time() - start
-        progress_step += progress_increment
-        progress_bar.progress(int(progress_step))
-    
-    if calc_nuclear:
-        status_text.text("Calculating nuclear attraction integrals...")
-        start = time.time()
-        if subset_slice:
-            V = Integrals.nuc_mat_symm(basis, mol, slice=subset_slice)
-        else:
-            V = Integrals.nuc_mat_symm(basis, mol)
+        if calc_nuclear:
+            status_text.text("Calculating nuclear attraction integrals...")
+            start = time.time()
+            if subset_slice:
+                V = Integrals.nuc_mat_symm(basis, mol, slice=subset_slice)
+            else:
+                V = Integrals.nuc_mat_symm(basis, mol)
+            
+            if use_spherical:
+                c2sph_mat = basis.cart2sph_basis()
+                V = np.dot(c2sph_mat, np.dot(V, c2sph_mat.T))
+            
+            results['Nuclear'] = V
+            timings['Nuclear'] = time.time() - start
+            progress_step += progress_increment
+            progress_bar.progress(int(progress_step))
         
-        if use_spherical:
-            c2sph_mat = basis.cart2sph_basis()
-            V = np.dot(c2sph_mat, np.dot(V, c2sph_mat.T))
+        # Calculate two-electron integrals
+        if calc_eri_4c2e:
+            if n_basis > 25:
+                st.warning("⚠️ 4c2e integral calculation for more than 25 basis functions will be too slow for running on the cloud. Download the app and run on your system.")
+                calc_eri_4c2e = False
+            else:
+                status_text.text("Calculating 4c2e integrals (this may take a while)...")
+                start = time.time()
+                ERI = Integrals.conv_4c2e_symm(basis)
+                # ERI = load_4c2e_eri(basis)
+                timings['4c2e'] = time.time() - start
+                results['4c2e'] = ERI
+            
+            progress_step += progress_increment
+            progress_bar.progress(int(progress_step))
         
-        results['Nuclear'] = V
-        timings['Nuclear'] = time.time() - start
-        progress_step += progress_increment
-        progress_bar.progress(int(progress_step))
-    
-    # Calculate two-electron integrals
-    if calc_eri_4c2e:
-        status_text.text("Calculating 4c2e integrals (this may take a while)...")
-        start = time.time()
-        ERI = Integrals.conv_4c2e_symm(basis)
-        timings['4c2e'] = time.time() - start
-        results['4c2e'] = ERI
+        if calc_eri_3c2e:
+            status_text.text("Calculating 3c2e integrals...")
+            start = time.time()
+            ERI_3c = Integrals.rys_3c2e_symm(basis, auxbasis)
+            results['3c2e'] = ERI_3c
+            timings['3c2e'] = time.time() - start
+            progress_step += progress_increment
+            progress_bar.progress(int(progress_step))
         
-        progress_step += progress_increment
-        progress_bar.progress(int(progress_step))
+        if calc_eri_2c2e:
+            status_text.text("Calculating 2c2e integrals...")
+            start = time.time()
+            ERI_2c = Integrals.rys_2c2e_symm(basis)
+            results['2c2e'] = ERI_2c
+            timings['2c2e'] = time.time() - start
+            progress_step += progress_increment
+            progress_bar.progress(int(progress_step))
+        
+        progress_bar.progress(100)
+        status_text.text("✅ All calculations completed!")
+        # Store results in session state
+        st.session_state.results = results
+        st.session_state.timings = timings
+        st.session_state.calculation_done = True
+    except ImportError as e:
+            st.error(f"❌ Import Error: {str(e)}")
+            st.info("Make sure PyFock is installed: `pip install pyfock`")
+            progress_bar.empty()
+            status_text.empty()
+    except Exception as e:
+        st.error(f"❌ Calculation failed: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+        progress_bar.empty()
+        status_text.empty()
+    # Cleanup
+    os.unlink(xyz_file)
+        
     
-    if calc_eri_3c2e:
-        status_text.text("Calculating 3c2e integrals...")
-        start = time.time()
-        ERI_3c = Integrals.rys_3c2e_symm(basis, auxbasis)
-        results['3c2e'] = ERI_3c
-        timings['3c2e'] = time.time() - start
-        progress_step += progress_increment
-        progress_bar.progress(int(progress_step))
+        
+    if 'xyz_file' in locals():
+        try:
+            os.unlink(xyz_file)
+        except:
+            pass
+# Display results if calculation has been done
+if st.session_state.calculation_done and st.session_state.results is not None:
     
-    if calc_eri_2c2e:
-        status_text.text("Calculating 2c2e integrals...")
-        start = time.time()
-        ERI_2c = Integrals.rys_2c2e_symm(basis)
-        results['2c2e'] = ERI_2c
-        timings['2c2e'] = time.time() - start
-        progress_step += progress_increment
-        progress_bar.progress(int(progress_step))
-    
-    progress_bar.progress(100)
-    status_text.text("✅ All calculations completed!")
-    
+    results = st.session_state.results
+    timings = st.session_state.timings
     st.success("✅ Integral calculations completed successfully!")
     
     # Display results
@@ -793,26 +845,7 @@ try:
             )
             st.plotly_chart(fig_eig, use_container_width=True)
     
-    # Cleanup
-    os.unlink(xyz_file)
     
-except ImportError as e:
-    st.error(f"❌ Import Error: {str(e)}")
-    st.info("Make sure PyFock is installed: `pip install pyfock`")
-    progress_bar.empty()
-    status_text.empty()
-except Exception as e:
-    st.error(f"❌ Calculation failed: {str(e)}")
-    import traceback
-    st.code(traceback.format_exc())
-    progress_bar.empty()
-    status_text.empty()
-    
-    if 'xyz_file' in locals():
-        try:
-            os.unlink(xyz_file)
-        except:
-            pass
 
 
 # Initial instructions

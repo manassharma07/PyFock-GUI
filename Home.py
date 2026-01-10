@@ -104,6 +104,7 @@ st.sidebar.markdown("""
 * Compare with PySCF
 * Download cube files & scripts
 * Interactive 3D visualization
+* Calculate molecular integrals
 * No installation required!
 """)
 
