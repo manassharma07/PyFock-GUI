@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+import pyfock
 
 @st.cache_data
 def load_4c2e_eri(_basis):
