@@ -7,7 +7,6 @@ import streamlit.components.v1 as components
 from io import StringIO
 import time
 from pyscf import gto, dft, scf
-from pyscf.dft import gen_grid
 import re
 import base64
 import contextlib
@@ -86,10 +85,10 @@ st.sidebar.markdown("""
 **Pure Python DFT** with performance matching C++ codes!
 
 **Key Advantages:**
-- 100% Pure Python (including molecular integrals)
+- 100% Pure Python (including molecular integrals and XC evaluation)
 - Numba JIT acceleration
 - GPU support (CUDA via CuPy)
-- Near-quadratic scaling (~O(N²·⁰⁵))
+- Near-quadratic scaling (~O(N²))
 - Accuracy matching PySCF (<10⁻⁷ Ha)
 - Windows/Linux/MacOS compatible
 - Easy pip installation
@@ -131,7 +130,13 @@ st.sidebar.markdown("---")
 # Installation
 with st.sidebar.expander("📦 Installation Instructions for PyFock"):
     st.code("""
-# Install LibXC — required by PyFock
+# Install PyFock
+pip install pyfock
+
+# Optional: GPU support
+pip install cupy-cuda12x   # choose version appropriate for your CUDA setup
+
+# Optional: LibXC — required for more DFT functionals
 # For Python < 3.10:
 # Install system LibXC and then install pylibxc2 via pip
 sudo apt-get install libxc-dev     # Ubuntu/Debian
@@ -142,12 +147,6 @@ pip install pylibxc2
 # Use conda-forge instead (recommended)
 conda install -c conda-forge pylibxc -y
 
-# Install PyFock
-pip install pyfock
-
-# Optional: GPU support
-pip install cupy-cuda12x   # choose version appropriate for your CUDA setup
-
 """, language="bash")
 
 st.sidebar.markdown("---")
@@ -157,18 +156,18 @@ with st.sidebar.expander("⚡ Performance Highlights"):
     st.markdown("""
 **CPU Performance:**
 - Upto 2x faster than PySCF
-- Strong scaling up to 32 cores
-- ~O(N²·⁰⁵) scaling with basis functions
-- Suitable for large systems (upto ~10,000 basis functions)
+- Good scaling up to 32 cores
+- ~O(N²) scaling with basis functions
+- Suitable for large systems (upto ~20,000 basis functions)
 
 **GPU Acceleration:**
-- Up to **14× speedup** on A100 GPU vs 4-core CPU
-- Single A100 GPU handles 4000+ basis functions
+- Up to **24× speedup** on A100 GPU vs 4-core CPU
+- Single A100 GPU handles ~4000 basis functions
 - Consumer GPUs (RTX series) supported
 """)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("*Made with PyFock by PhysWhiz*")
+# st.sidebar.markdown("*Made in India🇮🇳*")
 st.sidebar.markdown("*Pure Python • Numba JIT • GPU Ready*")
 
 def strip_ansi(text):
@@ -402,15 +401,57 @@ H      -1.210516092616227     -0.900663538561855      0.889526642712922
 H      -1.210427870830911     -0.900750324054947     -0.889509722206098
 H      -2.020199970977986      0.410716373006091     -0.000096671211569""",
 
+    "AgCl": """2
+AgCl molecule
+Ag    0.000000    0.000000    0.000000
+Cl    0.000000    0.000000    2.280000""",
+
+    "AuCl": """2
+AuCl molecule
+Au    0.000000    0.000000    0.000000
+Cl    0.000000    0.000000    2.230000""",
+
+    "Cd dimer": """2
+Cd dimer
+Cd    0.000000    0.000000    0.000000
+Cd    0.000000    0.000000    2.980000""",
+
 }
 
-# XC functional mapping to libxc codes
+# Natively implemented PyFock functionals
 XC_FUNCTIONALS = {
-    "LDA (SVWN5)": (1, 7),  # Slater exchange + VWN5 correlation
-    "PBE": (101, 130),       # PBE exchange + PBE correlation
-    "BLYP": (106, 131),      # Becke88 exchange + LYP correlation
-    "BP86": (106, 132),      # Becke88 exchange + P86 correlation
+    "LDA": "LDA",
+    "HF": "HF",
+    "PBE": "PBE",
+    "PBESOL": "PBESOL",
+    "RPBE": "RPBE",
+    "PW91": "PW91",
+    "BP86": "BP86",
+    "BLYP": "BLYP",
+    "R2SCAN": "R2SCAN",
+    "TPSS": "TPSS",
+    "M06L": "M06L",
+    "TASK": "TASK",
 }
+PYSCF_XC_FUNCTIONALS = {
+    "LDA": "1,7",
+    "SVWN5": "1,7",
+    "SPZ": "1,9",
+    "SPZMOD": "1,10",
+    "SPW": "1,12",
+    "SPWMOD": "1,12",
+    "PBE": "101,130",
+    "PBESOL": "116,133",
+    "RPBE": "117,130",
+    "PW91": "109,134",
+    "BP86": "106,132",
+    "BLYP": "106,131",
+    "R2SCAN": "497,498",
+    "TPSS": "202,231",
+    "M06L": "203,233",
+    "TASK": "707,7",
+}
+META_GGA_FUNCTIONALS = {"R2SCAN", "TPSS", "M06L", "TASK"}
 
 BASIS_SETS = ["sto-3g", "sto-6g", "3-21G", "4-31G", "6-31G", "6-31+G", "6-31++G", "cc-pvDZ", "def2-SVP", "def2-TZVP"]
 
@@ -430,24 +471,20 @@ with col1:
     molecule_choice = st.selectbox(
         "Select example molecule or paste custom XYZ:",
         [
-            "Water", # correct
-            "Acetone", # correct
-            "Tetrahydrofuran", # correct
-            "Pyrrole", # correct
-            "Dimethyl ether", # correct
-            # "Acetonitrile", 
-            # "Methane",
-            "Benzene", # correct
-            # "Ammonia",
-            "Carbon Dioxide", # correct
+            "Water", 
+            "Acetone", 
+            "Tetrahydrofuran",
+            "Pyrrole", 
+            "Dimethyl ether", 
+            "Benzene", 
+            "Carbon Dioxide", 
             "Hydrogen Peroxide",
-            # "Formaldehyde",
-            # "Hydrogen Cyanide",
-            # "Acetylene",
-            # "Ethylene",
-            # "Ethane",
             "Formic Acid",
-            "Hydrogen Sulfide", # correct
+            "Hydrogen Sulfide",
+            "Methane",
+            "AgCl",
+            "AuCl",
+            "Cd dimer",
             "Custom"
         ]
     )
@@ -507,11 +544,18 @@ with col1:
         index=0
     )
     
-    max_iterations = st.number_input("Max Iterations:", min_value=1, max_value=16, value=14)
-    conv_crit = st.number_input("Convergence Criterion:", min_value=1e-7, max_value=1e-3, value=1e-6, format="%.1e")
+    default_max_iterations = 14
+    default_conv_crit = 1e-6
+    max_iterations = st.number_input("Max Iterations:", min_value=1, max_value=50, value=default_max_iterations)
+    conv_crit = st.number_input("Convergence Criterion:", min_value=1e-8, max_value=1e-3, value=default_conv_crit, format="%.1e")
+    ao_basis_type = st.selectbox("AO Basis Type:", ["CAO", "SAO"], index=0)
+    use_sao_basis = ao_basis_type == "SAO"
     ncores = 1#st.number_input("Number of Cores:", min_value=1, max_value=8, value=4)
-    use_pyscf_grids = st.checkbox("Use PySCF Grids for XC Term", value=True, help="Use either PySCF grids or PyFock grids for DFT calculaiton. Using PySCF grids is recommended as those are relatively smaller. NOTE: This does not perform a PySCF DFT calculation, only grid generation.") 
-    compare_pyscf = st.checkbox("Compare energy with PySCF (will take longer)", value=False, help="Runs a KS-DFT calculation using same settings in PySCF for energy comparison.")
+    if xc_functional == "HF":
+        use_pyscf_grids = False
+    else:
+        use_pyscf_grids = st.checkbox("Use PySCF Grids for XC Term", value=True, help="Use PyFock's built-in PySCF grid generation path for the XC term. This does not perform a PySCF DFT calculation, only grid generation.")
+    compare_pyscf = st.checkbox("Compare energy with PySCF (will take longer)", value=False, help="Runs an RIHF or KS-DFT calculation using same settings in PySCF for energy comparison.")
 
 st.markdown("---")
 
@@ -562,7 +606,7 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
             status_text.text("Importing PyFock modules...")
             progress_bar.progress(10)
             
-            from pyfock import Basis, Mol, DFT, Utils, Grids
+            from pyfock import Basis, Mol, DFT, Utils
             
             # Create temporary XYZ file
             status_text.text("Creating molecule object...")
@@ -591,41 +635,23 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
             
             st.info(f"✓ System has {n_basis} basis functions (within limit)")
             
-            # Get XC functional codes
-            funcx, funcc = XC_FUNCTIONALS[xc_functional]
-            funcidcrysx = [funcx, funcc]
-            funcidpyscf = f"{funcx},{funcc}"
-            
-            # Generating grids
-            status_text.text("Generating numerical grids...")
-            progress_bar.progress(22)
-            if use_pyscf_grids:
-                # PySCF grids
-                molPySCF = gto.Mole()
-                molPySCF.atom = xyz_file
-                molPySCF.basis = basis_set
-                molPySCF.cart = True
-                molPySCF.verbose = 0
-                molPySCF.build()
-                grids = gen_grid.Grids(molPySCF)
-                grids.level = 3        # optional: quality of grid (0–9 approx)
-                grids.prune = None     # disable pruning if you want the full Lebedev mesh
-                grids.build(with_non0tab=True)
-            else:
-                # PyFock grids
-                grids = Grids(mol, basis=basis, level = 3, radial_precision=1.0e-13, ncores=ncores)
+            funcidcrysx = XC_FUNCTIONALS[xc_functional]
 
-            
+            status_text.text("Preparing calculation...")
+            progress_bar.progress(22)
 
             # Initialize DFT object
             status_text.text("Initializing DFT calculation...")
             progress_bar.progress(25)
             
-            dftObj = DFT(mol, basis, auxbasis_obj, xc=funcidcrysx, grids=grids, gridsLevel=3)
+            dftObj = DFT(mol, basis, auxbasis_obj, xc=funcidcrysx, gridsLevel=3, use_pyscf_grids=use_pyscf_grids)
             dftObj.conv_crit = conv_crit
             dftObj.max_itr = max_iterations
             dftObj.ncores = ncores
             dftObj.save_ao_values = True
+            dftObj.sao = use_sao_basis
+            if xc_functional == "HF":
+                dftObj.DF_algo = 1  # Use RIHF for HF calculations (preliminary)
             
             # Run SCF calculation
             status_text.text("Running SCF calculation... This may take a few moments.")
@@ -642,6 +668,12 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
                 st.success(f"✅ PyFock KS-DFT calculation converged in {pyfock_time:.2f} seconds and {dftObj.niter} iterations!")
             else:
                 st.warning(f"⚠️ PyFock KS-DFT calculation did not converge in {dftObj.niter} iterations and {pyfock_time:.2f} seconds!")
+
+            def get_cube_mo_coeff(mo_idx):
+                mo_coeff = dftObj.mo_coefficients[:, int(mo_idx)]
+                if use_sao_basis and mo_coeff.shape[0] != basis.bfs_nao:
+                    mo_coeff = basis.cart2sph_basis().T @ mo_coeff
+                return mo_coeff
             
             st.header("3. Results")
             
@@ -665,7 +697,7 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
                             f"{dftObj.Kinetic_energy:.8f}",
                             f"{dftObj.Nuc_energy:.8f}",
                             f"{dftObj.J_energy:.8f}",
-                            f"{dftObj.XC_energy:.8f}",
+                            "N/A" if dftObj.XC_energy is None else f"{dftObj.XC_energy:.8f}",
                             f"{dftObj.Nuclear_repulsion_energy:.8f}"
                         ]
                     })
@@ -767,7 +799,7 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
                     homo_cube_file = f.name
                 
                 Utils.write_orbital_cube(
-                    mol, basis, dftObj.mo_coefficients[:, homo_idx],
+                    mol, basis, get_cube_mo_coeff(homo_idx),
                     homo_cube_file, nx=cube_resolution, ny=cube_resolution, nz=cube_resolution,
                     ncores=ncores
                 )
@@ -784,7 +816,7 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
                     lumo_cube_file = f.name
                 
                 Utils.write_orbital_cube(
-                    mol, basis, dftObj.mo_coefficients[:, lumo_idx],
+                    mol, basis, get_cube_mo_coeff(lumo_idx),
                     lumo_cube_file, nx=cube_resolution, ny=cube_resolution, nz=cube_resolution,
                     ncores=ncores
                 )
@@ -878,7 +910,7 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
                     with tempfile.NamedTemporaryFile(mode='w', suffix=f'_MO{mo_idx_choice}.cube', delete=False) as f:
                         mo_cube_file = f.name
                     Utils.write_orbital_cube(
-                        mol, basis, dftObj.mo_coefficients[:, int(mo_idx_choice)],
+                        mol, basis, get_cube_mo_coeff(mo_idx_choice),
                         mo_cube_file, nx=cube_resolution, ny=cube_resolution, nz=cube_resolution,
                         ncores=ncores
                     )
@@ -897,28 +929,30 @@ if st.button("🚀 Run DFT Calculation", type="primary"):
                 status_text.text("Running PySCF calculation for comparison...")
                 
                 try:
-                    if not use_pyscf_grids:
-                        molPySCF = gto.Mole()
-                        molPySCF.atom = xyz_file
-                        molPySCF.basis = basis_set
-                        molPySCF.cart = True
-                        molPySCF.verbose = 5
-                        molPySCF.build()
-                    
-                    mf = dft.rks.RKS(molPySCF).density_fit(auxbasis=auxbasis)
-                    mf.xc = funcidpyscf
+                    molPySCF = gto.Mole()
+                    molPySCF.atom = xyz_file
+                    molPySCF.basis = basis_set
+                    molPySCF.cart = not use_sao_basis
+                    molPySCF.verbose = 5
+                    molPySCF.build()
+
+                    if xc_functional == "HF":
+                        mf = scf.RHF(molPySCF).density_fit(auxbasis=auxbasis)
+                    else:
+                        mf = dft.rks.RKS(molPySCF).density_fit(auxbasis=auxbasis)
+                        mf.xc = PYSCF_XC_FUNCTIONALS[xc_functional]
+                        mf.grids.level = dftObj.gridsLevel
+                        # if getattr(dftObj, "grids", None) is not None:
+                        #     mf.grids.coords = dftObj.grids.coords
+                        #     mf.grids.weights = dftObj.grids.weights
+                        #     mf.grids.build = lambda *args, **kwargs: None
                     # mf.direct_scf = False
                     mf.conv_tol = conv_crit
                     mf.max_cycle = max_iterations
-                    # mf.grids.level = 5
-                    mf.grids.coords = grids.coords
-                    mf.grids.weights = grids.weights
 
-                    # Disable PySCF's automatic grid generation
-                    mf.grids.build = lambda *args, **kwargs: None
-                    
                     start_pyscf = time.time()
-                    energyPySCF = mf.kernel(dm0 = mf.init_guess_by_1e(molPySCF))
+                    dmat_pyscf_init = mf.init_guess_by_1e(molPySCF)
+                    energyPySCF = mf.kernel(dm0=dmat_pyscf_init)
                     pyscf_time = time.time() - start_pyscf
                     
                     st.subheader("5. Comparison with PySCF")
@@ -981,9 +1015,7 @@ with open('molecule.xyz', 'w') as f:
 # Calculation parameters
 basis_set_name = '{basis_set}'
 auxbasis_name = '{auxbasis}'
-funcx = {funcx}
-funcc = {funcc}
-funcidcrysx = [funcx, funcc]
+xc_functional = {xc_functional!r}
 
 # Initialize molecule and basis
 mol = Mol(coordfile='molecule.xyz')
@@ -991,16 +1023,25 @@ basis = Basis(mol, {{'all': Basis.load(mol=mol, basis_name=basis_set_name)}})
 auxbasis = Basis(mol, {{'all': Basis.load(mol=mol, basis_name=auxbasis_name)}})
 
 # Setup DFT calculation
-dftObj = DFT(mol, basis, auxbasis, xc=funcidcrysx)
+dftObj = DFT(mol, basis, auxbasis, xc=xc_functional, use_pyscf_grids={use_pyscf_grids})
 dftObj.conv_crit = {conv_crit}
 dftObj.max_itr = {max_iterations}
 dftObj.ncores = ncores
 dftObj.save_ao_values = True
+dftObj.sao = {use_sao_basis}
+# if xc_functional == "HF":
+#     dftObj.DF_algo = 1
 
 # Run SCF
 energy, dmat = dftObj.scf()
 
 print(f"Total Energy: {{energy:.8f}} Ha")
+
+def get_cube_mo_coeff(mo_idx):
+    mo_coeff = dftObj.mo_coefficients[:, int(mo_idx)]
+    if dftObj.sao and mo_coeff.shape[0] != basis.bfs_nao:
+        mo_coeff = basis.cart2sph_basis().T @ mo_coeff
+    return mo_coeff
 
 # Find HOMO and LUMO
 occupied = np.where(dftObj.mo_occupations > 1e-8)[0]
@@ -1009,11 +1050,11 @@ if len(occupied) > 0 and len(occupied) < len(dftObj.mo_energies):
     lumo_idx = homo_idx + 1
     
     # Generate cube files
-    Utils.write_orbital_cube(mol, basis, dftObj.mo_coefficients[:, homo_idx], 
+    Utils.write_orbital_cube(mol, basis, get_cube_mo_coeff(homo_idx), 
                             'HOMO.cube', nx={cube_resolution}, ny={cube_resolution}, 
                             nz={cube_resolution}, ncores=ncores)
     
-    Utils.write_orbital_cube(mol, basis, dftObj.mo_coefficients[:, lumo_idx], 
+    Utils.write_orbital_cube(mol, basis, get_cube_mo_coeff(lumo_idx), 
                             'LUMO.cube', nx={cube_resolution}, ny={cube_resolution}, 
                             nz={cube_resolution}, ncores=ncores)
 
@@ -1029,8 +1070,9 @@ print("Cube files generated successfully!")
                 'xyz_content': xyz_content,
                 'basis_set': basis_set,
                 'auxbasis': auxbasis, # Often a different basis set for auxiliary functions
-                'funcx': funcx,        # Example ID for exchange functional (like LDA_X)
-                'funcc': funcc,        # Example ID for correlation functional (like LDA_C_PZ)
+                'xc_functional': funcidcrysx,
+                'use_sao_basis': use_sao_basis,
+                'use_pyscf_grids': use_pyscf_grids,
                 'conv_crit': conv_crit,
                 'max_iterations': max_iterations,
                 'cube_resolution': cube_resolution
