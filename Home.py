@@ -89,7 +89,7 @@ embed_video()
 
 # Sidebar with enhanced styling
 # st.sidebar.image("https://raw.githubusercontent.com/manassharma07/PyFock/main/logo_crysx_pyfock.png", use_container_width=True)
-st.logo("https://raw.githubusercontent.com/manassharma07/PyFock/main/logo_crysx_pyfock.png", size="large", link="https://github.com/manassharma07/pyfock",)
+st.logo("logo_crysx_pyfock_dark_mode_landscape_transparent.png", size="large", link="https://github.com/manassharma07/pyfock",)
 
 
 # About PyFock section
