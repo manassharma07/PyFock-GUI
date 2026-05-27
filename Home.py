@@ -17,6 +17,19 @@ from ase.io import read as ase_read
 import pandas as pd
 import pyfock
 
+# Article / citation metadata
+PYFOCK_PAPER_TITLE = "PyFock: A Just-In-Time Compiled Gaussian Basis DFT Python Code for CPU and GPU Architectures"
+PYFOCK_PAPER_AUTHORS = "Manas Sharma and Marek Sierka"
+PYFOCK_PAPER_YEAR = "2026"
+PYFOCK_PAPER_DATE = "26 May 2026"
+PYFOCK_PAPER_VERSION = "V1"
+
+CHEMRXIV_DOI = "10.26434/chemrxiv.15003943/v1"
+CHEMRXIV_URL = f"https://doi.org/{CHEMRXIV_DOI}"
+CHEMRXIV_FULLTEXT_URL = "https://chemrxiv.org/doi/full/10.26434/chemrxiv.15003943/v1"
+CHEMRXIV_PDF_URL = "https://chemrxiv.org/doi/pdf/10.26434/chemrxiv.15003943/v1"
+CHEMRXIV_LICENSE = "CC BY 4.0"
+
 # Set page configuration
 st.set_page_config(
     page_title='PyFock GUI - Interactive DFT Calculations',
@@ -112,13 +125,18 @@ st.sidebar.markdown("---")
 
 # Links section
 st.sidebar.markdown("### 🔗 Links & Resources")
-st.sidebar.markdown("""
+st.sidebar.markdown(f"""
 [![GitHub (PyFock)](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock)
 [![GitHub (PyFock GUI)](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock-GUI)
 [![PyPI](https://img.shields.io/badge/PyPI-Package-orange?logo=pypi)](https://pypi.org/project/pyfock/)
 [![Docs](https://img.shields.io/badge/Documentation-Read-green?logo=readthedocs)](https://pyfock-docs.bragitoff.com)
+[![ChemRxiv](https://img.shields.io/badge/ChemRxiv-Preprint-red)]({CHEMRXIV_URL})
 
-📄 **Article:** *(coming soon)*
+📄 **Preprint:**  
+**{PYFOCK_PAPER_TITLE}**  
+{PYFOCK_PAPER_AUTHORS}, *ChemRxiv*, {PYFOCK_PAPER_DATE}.  
+
+🔗 **DOI:** [{CHEMRXIV_DOI}]({CHEMRXIV_URL})  
 
 👨‍💻 **Developer:** [Manas Sharma](https://www.linkedin.com/in/manassharma07)
 
@@ -475,7 +493,7 @@ with col1:
             "Acetone", 
             "Tetrahydrofuran",
             "Pyrrole", 
-            "Dimethyl ether", 
+            "Dimethyl Ether", 
             "Benzene", 
             "Carbon Dioxide", 
             "Hydrogen Peroxide",
