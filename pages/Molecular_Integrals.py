@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import pyfock
+from gui_common import render_sidebar
 
 @st.cache_data
 def load_4c2e_eri(_basis):
@@ -28,127 +29,7 @@ st.set_page_config(
         'About': "PyFock GUI - A web interface for PyFock, a pure Python DFT code with Numba JIT acceleration"
     }
 )
-
-# === Background video styling ===
-def set_css():
-    st.markdown("""
-        <style>
-            #myVideo {
-                position: fixed;
-                right: 0;
-                bottom: 0;
-                min-width: 100%; 
-                min-height: 100%;
-                opacity: 0.12;
-                pointer-events: none;
-            }
-            .content {
-                position: fixed;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                color: #f1f1f1;
-                width: 100%;
-                padding: 20px;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
-def embed_video():
-    video_link = "https://raw.githubusercontent.com/manassharma07/Website_Files_for_PyFock/main/background_video_pyfock.mp4"
-    st.sidebar.markdown(f"""
-        <video autoplay muted loop id="myVideo">
-            <source src="{video_link}">
-            Your browser does not support HTML5 video.
-        </video>
-    """, unsafe_allow_html=True)
-
-set_css()
-embed_video()
-
-# Sidebar with enhanced styling (same as home page)
-st.logo("https://raw.githubusercontent.com/manassharma07/PyFock/main/logo_crysx_pyfock.png", size="large", link="https://github.com/manassharma07/pyfock",)
-
-st.sidebar.markdown("### About PyFock")
-st.sidebar.markdown("""
-**Pure Python DFT** with performance matching C++ codes!
-
-**Key Advantages:**
-- 100% Pure Python (including molecular integrals)
-- Numba JIT acceleration
-- GPU support (CUDA via CuPy)
-- Near-quadratic scaling (~O(N²·⁰⁵))
-- Accuracy matching PySCF (<10⁻⁷ Ha)
-- Windows/Linux/MacOS compatible
-- Easy pip installation
-""")
-
-st.sidebar.markdown("---")
-
-st.sidebar.markdown("### GUI Features")
-st.sidebar.markdown("""
-* Run DFT in your browser
-* Visualize HOMO, LUMO, density
-* Compare with PySCF
-* Download cube files & scripts
-* Interactive 3D visualization
-* Calculate molecular integrals
-* No installation required!
-""")
-
-st.sidebar.markdown("---")
-
-st.sidebar.markdown("### 🔗 Links & Resources")
-st.sidebar.markdown("""
-[![GitHub (PyFock)](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock)
-[![GitHub (PyFock GUI)](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock-GUI)
-[![PyPI](https://img.shields.io/badge/PyPI-Package-orange?logo=pypi)](https://pypi.org/project/pyfock/)
-[![Docs](https://img.shields.io/badge/Documentation-Read-green?logo=readthedocs)](https://pyfock-docs.bragitoff.com)
-
-📄 **Article:** *(coming soon)*
-
-👨‍💻 **Developer:** [Manas Sharma](https://www.linkedin.com/in/manassharma07)
-
-⭐ **Star the repo** if you find it useful!
-""")
-
-st.sidebar.markdown("---")
-
-with st.sidebar.expander("📦 Installation Instructions for PyFock"):
-    st.code("""
-# Install LibXC — required by PyFock
-# For Python < 3.10:
-sudo apt-get install libxc-dev     # Ubuntu/Debian
-pip install pylibxc2
-
-# For Python >= 3.10:
-conda install -c conda-forge pylibxc -y
-
-# Install PyFock
-pip install pyfock
-
-# Optional: GPU support
-pip install cupy-cuda12x
-""", language="bash")
-
-st.sidebar.markdown("---")
-
-with st.sidebar.expander("⚡ Performance Highlights"):
-    st.markdown("""
-**CPU Performance:**
-- Upto 2x faster than PySCF
-- Strong scaling up to 32 cores
-- ~O(N²·⁰⁵) scaling with basis functions
-- Suitable for large systems (upto ~10,000 basis functions)
-
-**GPU Acceleration:**
-- Up to **14× speedup** on A100 GPU vs 4-core CPU
-- Single A100 GPU handles 4000+ basis functions
-- Consumer GPUs (RTX series) supported
-""")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("*Made with PyFock by PhysWhiz*")
-st.sidebar.markdown("*Pure Python • Numba JIT • GPU Ready*")
+render_sidebar()
 
 
 # Initialize session state
