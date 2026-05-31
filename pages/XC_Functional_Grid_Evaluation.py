@@ -81,9 +81,9 @@ FUNCTIONALS = {
     "RPBE exchange": [117],
     "BLYP exchange + correlation": [106, 131],
     "BP86 exchange + correlation": [106, 132],
-    "TPSS exchange + correlation": [202, 231],
-    "M06-L exchange + correlation": [203, 233],
-    "r2SCAN exchange + correlation": [497, 498],
+    # "TPSS exchange + correlation": [202, 231],
+    # "M06-L exchange + correlation": [203, 233],
+    # "r2SCAN exchange + correlation": [497, 498],
 }
 
 FAMILY_LABELS = {1: "LDA", 2: "GGA", 3: "Hybrid", 4: "mGGA"}
