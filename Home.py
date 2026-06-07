@@ -342,7 +342,7 @@ with col1:
             "Hydrogen Sulfide",
             "Methane",
             "AgCl",
-            "AuCl",
+            # "AuCl",
             "Cd dimer",
             "Custom"
         ]

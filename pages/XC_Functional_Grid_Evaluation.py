@@ -72,13 +72,10 @@ H -0.550000 -0.940000  0.000000""",
 BASIS_SETS = ["sto-3g", "sto-6g", "3-21G", "6-31G", "def2-SVP"]
 
 FUNCTIONALS = {
-    "LDA exchange (LDA_X)": [1],
     "LDA exchange + PW correlation": [1, 12],
     "LDA exchange + VWN correlation": [1, 7],
-    "PBE exchange (GGA_X_PBE)": [101],
     "PBE exchange + correlation": [101, 130],
     "PBESOL exchange + correlation": [116, 133],
-    "RPBE exchange": [117],
     "BLYP exchange + correlation": [106, 131],
     "BP86 exchange + correlation": [106, 132],
     # "TPSS exchange + correlation": [202, 231],
