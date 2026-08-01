@@ -39,6 +39,10 @@ LibXC is not required for the GUI functional list above.
 
 Interactive 3D structure viewing with py3Dmol, HOMO/LUMO cube generation, electron density cubes, adjustable isosurfaces and opacity, and on-demand visualization of any molecular orbital.
 
+### Geometry Optimization
+
+The Geometry Optimization page couples PyFock energies and forces to ASE optimizers including BFGS, BFGSLineSearch, LBFGS, LBFGSLineSearch, FIRE, FIRE2, GPMin, MDMin, and ODE12r. It shows the optimized structure and convergence history, and exports both the final structure and the full trajectory as extXYZ with energy and forces retained at every frame. The hosted app limits each run to 10 optimization cycles and 120 basis functions; local runs can increase these limits in the generated reproduction script.
+
 ### Input/Output
 
 Choose from preconfigured example molecules or paste custom XYZ coordinates. The GUI can download HOMO, LUMO, density cube files, and a generated Python script that reproduces the PyFock calculation.
@@ -87,6 +91,8 @@ Select an example molecule or paste custom XYZ coordinates. Choose the basis set
 
 After the calculation, inspect total energy, energy components, HOMO-LUMO gap, orbital energies, density matrix, convergence history, molecule/orbital visualizations, cube downloads, and the generated Python input script.
 
+For a geometry relaxation, open **Geometry Optimization** in the page navigation, select the PyFock DFT settings and an ASE optimizer, set the maximum-force convergence criterion, and start the run. The page displays the final coordinates and an energy/force convergence plot, and provides optimized-geometry, extXYZ trajectory, and reproduction-script downloads.
+
 ### Example Calculation
 
 ```python
@@ -118,7 +124,7 @@ PyFock uses Numba JIT compilation. The first calculation in a fresh Python sessi
 
 ### System Limits
 
-The cloud GUI limits calculations to roughly 120 basis functions. Local runs can handle much larger systems depending on memory, CPU/GPU hardware, and basis size.
+The cloud GUI limits calculations to roughly 120 basis functions and geometry optimizations to 10 cycles. Local runs can handle much larger systems and longer optimizations depending on memory, CPU/GPU hardware, and basis size.
 
 ### Recommended Settings
 

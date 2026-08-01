@@ -80,9 +80,10 @@ def render_sidebar():
     st.sidebar.markdown(
         """
 * Run DFT in your browser
+* Optimize molecular geometries with ASE
 * Visualize HOMO, LUMO, density
 * Compare with PySCF
-* Download cube files & scripts
+* Download cube files, trajectories & scripts
 * Interactive 3D visualization
 * Calculate molecular integrals
 * No installation required!
