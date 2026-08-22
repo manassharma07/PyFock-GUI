@@ -197,12 +197,16 @@ Contributions are welcome. Please submit a pull request or open an issue to disc
 If you use PyFock or PyFock GUI in your research, please cite:
 
 ```bibtex
-@article{sharma2025pyfock,
-  title={PyFock: A Just-In-Time Compiled Gaussian Basis DFT Python Code for CPU and GPU Architectures},
-  author={Sharma, Manas and Sierka, Marek},
-  journal={[Journal Name]},
-  year={2026},
-  note={Manuscript in preparation}
+@article{sharma2026pyfock,
+  title        = {PyFock: A Just-In-Time Compiled Gaussian Basis DFT Python Code for CPU and GPU Architectures},
+  author       = {Sharma, Manas and Sierka, Marek},
+  journal = {The Journal of Physical Chemistry A},
+  year = {2026},
+  month = {08},
+  issn = {1089-5639},
+  doi = {10.1021/acs.jpca.6c03727},
+  url = {https://doi.org/10.1021/acs.jpca.6c03727},
+  eprint = {https://pubs.acs.org/jpcafh/article-pdf/doi/10.1021/acs.jpca.6c03727/67108190/acs.jpca.6c03727.pdf},
 }
 ```
 
