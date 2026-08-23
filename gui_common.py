@@ -3,9 +3,9 @@ import streamlit as st
 
 PYFOCK_PAPER_TITLE = "PyFock: A Just-In-Time Compiled Gaussian Basis DFT Python Code for CPU and GPU Architectures"
 PYFOCK_PAPER_AUTHORS = "Manas Sharma and Marek Sierka"
-PYFOCK_PAPER_DATE = "26 May 2026"
-CHEMRXIV_DOI = "10.26434/chemrxiv.15003943/v1"
-CHEMRXIV_URL = f"https://doi.org/{CHEMRXIV_DOI}"
+PYFOCK_PAPER_DATE = "August 2026"
+CHEMRXIV_DOI = "https://doi.org/10.1021/acs.jpca.6c03727"
+CHEMRXIV_URL = f"https://pubs.acs.org/jpcafh/article/doi/10.1021/acs.jpca.6c03727/5298372/PyFock-A-Just-In-Time-Compiled-Gaussian-Basis-DFT"
 
 
 def set_background_video_css():
@@ -99,13 +99,13 @@ def render_sidebar():
 [![GitHub (PyFock GUI)](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/manassharma07/PyFock-GUI)
 [![PyPI](https://img.shields.io/badge/PyPI-Package-orange?logo=pypi)](https://pypi.org/project/pyfock/)
 [![Docs](https://img.shields.io/badge/Documentation-Read-green?logo=readthedocs)](https://pyfock-docs.bragitoff.com)
-[![ChemRxiv](https://img.shields.io/badge/ChemRxiv-Preprint-red)]({CHEMRXIV_URL})
+[![Journal Article](https://img.shields.io/badge/J.%20Phys.%20Chem.%20A-Published-blue)]({CHEMRXIV_URL})
 
-📄 **Preprint:**
+📄 **Journal Article:**
 **{PYFOCK_PAPER_TITLE}**
-{PYFOCK_PAPER_AUTHORS}, *ChemRxiv*, {PYFOCK_PAPER_DATE}.
+{PYFOCK_PAPER_AUTHORS}, *The Journal of Physical Chemistry A*, {PYFOCK_PAPER_DATE}.
 
-🔗 **DOI:** [{CHEMRXIV_DOI}]({CHEMRXIV_URL})
+🔗 **DOI:** [{CHEMRXIV_DOI}]({CHEMRXIV_DOI})
 
 👨‍💻 **Developer:** [Manas Sharma](https://www.linkedin.com/in/manassharma07)
 
