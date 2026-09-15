@@ -434,6 +434,16 @@ settings = dict(
     max_iterations=int(max_iterations), ncores=ncores, use_sao_basis=use_sao_basis,
 )
 
+# Invalidate all calculation output when an SCF input changes. Display-only
+# controls are outside this snapshot and can still reuse the saved result.
+previous_settings = st.session_state.get(
+    'scf_input_settings', st.session_state.get('scf_result', {}).get('settings')
+)
+if previous_settings is not None and previous_settings != settings:
+    st.session_state.pop('scf_result', None)
+    st.session_state.pop('scf_error', None)
+st.session_state.scf_input_settings = dict(settings)
+
 if st.button("🚀 Run DFT Calculation", type="primary"):
     log = _io.StringIO()
     try:
@@ -461,8 +471,6 @@ else:
     dftObj = result['dft']
     dmat = result['dmat']
     energyPyFock = result['energy']
-    if result['settings'] != settings:
-        st.info("The results below belong to the last completed calculation. Run DFT to apply your changed settings.")
     saved = result['settings']
     st.caption(f"Completed calculation: {saved['xc_functional']} · {saved['basis_set']} · {'SAO' if saved['use_sao_basis'] else 'CAO'} · grid {saved['grid_level']} · {saved['initial_guess'].upper()} guess")
     st.header("2. SCF Results")
@@ -593,6 +601,7 @@ else:
 
     def perform_action(label, action, compute, save):
         log = _io.StringIO()
+        succeeded = False
         try:
             with st.spinner(label):
                 with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
@@ -600,10 +609,15 @@ else:
             save(value)
             if action not in result['actions']:
                 result['actions'].append(action)
+            succeeded = True
         except Exception as exc:
             st.error(f"{label} failed: {exc}")
         finally:
             result['log'] += f"\n--- {label} ---\n" + log.getvalue()
+        if succeeded and action['kind'] in ('forces', 'dipole', 'comparison'):
+            # Refresh buttons rendered before the result was saved. SCF and
+            # completed properties are retained and are not recalculated.
+            st.rerun()
 
     force_col, dipole_col, reference_col = st.columns(3)
     with force_col:

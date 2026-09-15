@@ -95,7 +95,7 @@ Select an example molecule or paste custom XYZ coordinates. Choose the basis set
 3. Request forces, a dipole moment with a 3D direction plot, MO/density cubes, or a PySCF comparison. Results stay in the current Streamlit session, so these actions and display changes do not rerun the original SCF.
 4. Download the updated script, which includes only successfully requested follow-up calculations, using the original SCF settings. A new successful SCF replaces the saved results and clears previous properties and cubes.
 
-Analytical forces reuse a converged, density-fitted pure-DFT result. The current PyFock backend requires additional SCF calculations for numerical HF/hybrid forces, so these are unavailable in the post-SCF force action. Editing the inputs does not alter saved results until a new SCF succeeds. Reloading or closing the session loses the saved calculation.
+Analytical forces reuse a converged, density-fitted pure-DFT result. The current PyFock backend requires additional SCF calculations for numerical HF/hybrid forces, so these are unavailable in the post-SCF force action. Changing any initial DFT setting clears the previous SCF results, input script, output log, and derived properties; run SCF again to obtain results for the new settings. Display-only changes retain saved results. Reloading or closing the session loses the saved calculation.
 
 For a geometry relaxation, open **Geometry Optimization** in the page navigation, select the PyFock DFT settings and an ASE optimizer, set the maximum-force convergence criterion, and start the run. The page displays the final coordinates and an energy/force convergence plot, and provides optimized-geometry, extXYZ trajectory, and reproduction-script downloads.
 
