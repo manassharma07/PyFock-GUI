@@ -757,7 +757,7 @@ settings_cols = st.columns([1, 1, 1])
 with settings_cols[0]:
     basis_name = st.selectbox("Basis set", BASIS_SETS, index=0)
 with settings_cols[1]:
-    grid_level = st.slider("Grid level", 3, 6, 3)
+    grid_level = st.slider("Grid level", 0, 5, 3)
 with settings_cols[2]:
     max_points = st.select_slider(
         "Evaluation points",

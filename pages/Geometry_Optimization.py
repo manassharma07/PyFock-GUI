@@ -51,6 +51,8 @@ XC_FUNCTIONALS = [
     "PW91",
     "BP86",
     "BLYP",
+    "B3LYP",
+    "PBE0",
     "R2SCAN",
     "TPSS",
     "M06L",
@@ -209,7 +211,7 @@ with dft_column:
         "Maximum SCF Iterations:",
         min_value=1,
         max_value=50,
-        value=14,
+        value=20,
         step=1,
         key="go_scf_iterations",
     )
@@ -224,25 +226,24 @@ with dft_column:
     ao_basis_type = st.selectbox(
         "AO Basis Type:",
         ["CAO", "SAO"],
-        index=0,
+        index=1,
         key="go_ao_basis_type",
     )
     use_sao_basis = ao_basis_type == "SAO"
+    grid_level = st.number_input(
+        "Grid Level:", min_value=0, max_value=5, value=3, step=1,
+        disabled=xc_functional == "HF", key="go_grid_level",
+        help="PyFock grid accuracy: 0 is coarsest and 5 is finest. Not used for HF.",
+    )
+    initial_guess = st.selectbox(
+        "Initial Guess:", ["sano", "core"], key="go_initial_guess",
+        format_func=lambda value: "SANO" if value == "sano" else "Core",
+        help="PyFock builds the starting density from atomic natural orbitals (SANO) or the core Hamiltonian.",
+    )
     if xc_functional == "HF":
-        use_pyscf_grids = False
         st.warning(
             "PyFock automatically falls back to numerical forces for HF, so each "
             "optimization cycle can require many additional SCF calculations."
-        )
-    else:
-        use_pyscf_grids = st.checkbox(
-            "Use PySCF Grids for the XC Term",
-            value=True,
-            help=(
-                "Uses PyFock's PySCF grid-generation path for the XC term; it does "
-                "not run a separate PySCF DFT calculation."
-            ),
-            key="go_use_pyscf_grids",
         )
 
 with optimization_column:
@@ -353,7 +354,8 @@ if run_clicked:
                 "sao": use_sao_basis,
                 "conv_crit": float(scf_convergence),
                 "max_itr": int(scf_max_iterations),
-                "use_pyscf_grids": bool(use_pyscf_grids),
+                "gridsLevel": int(grid_level),
+                "dmat_guess_method": initial_guess,
                 "directory": str(run_path / "calculation"),
             }
             atoms.calc = PyFockCalculator(**calculator_kwargs)
@@ -417,7 +419,8 @@ if run_clicked:
                 scf_convergence=float(scf_convergence),
                 scf_max_iterations=int(scf_max_iterations),
                 use_sao_basis=use_sao_basis,
-                use_pyscf_grids=bool(use_pyscf_grids),
+                grid_level=int(grid_level),
+                initial_guess=initial_guess,
                 ncores=ncores,
                 max_cycles=int(max_cycles),
             )

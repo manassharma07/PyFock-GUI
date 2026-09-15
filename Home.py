@@ -6,13 +6,9 @@ import py3Dmol
 import streamlit.components.v1 as components
 from io import StringIO
 import time
-from pyscf import gto, dft, scf
 import re
-import base64
 import contextlib
-import sys
 import io as _io
-from ase import Atoms
 from ase.io import read as ase_read
 import pandas as pd
 import pyfock
@@ -62,7 +58,7 @@ def get_structure_viz2(atoms_obj, style='stick', width=400, height=400):
         pbc_any = atoms_obj.pbc.any()
     except Exception:
         pbc_any = False
-    
+
     view.zoomTo()
     view.setBackgroundColor('white')
     return view
@@ -72,16 +68,16 @@ def visualize_cube_in_component(cube_content, title, iso_val, opac, width=420, h
     # return the HTML for embedding so it can be used inside columns
     view = py3Dmol.view(width=width, height=height)
     view.addModel(cube_content, 'cube')
-    view.setStyle({'sphere': {'colorscheme': 'Jmol', 'scale': 0.3}, 
+    view.setStyle({'sphere': {'colorscheme': 'Jmol', 'scale': 0.3},
                     'stick': {'colorscheme': 'Jmol', 'radius': 0.2}})
-    
+
     # For orbitals, show both lobes; for density, show only positive + negative appropriately
     if 'Density' not in title:
-        view.addVolumetricData(cube_content, 'cube', 
+        view.addVolumetricData(cube_content, 'cube',
                                 {'isoval': -abs(iso_val), 'color': 'blue', 'opacity': opac})
-    view.addVolumetricData(cube_content, 'cube', 
+    view.addVolumetricData(cube_content, 'cube',
                             {'isoval': abs(iso_val), 'color': 'red', 'opacity': opac})
-    
+
     view.zoomTo()
     view.setClickable({'clickable': 'true'})
     view.enableContextMenu({'contextMenuEnabled': 'true'})
@@ -129,7 +125,7 @@ H     0.629118    0.629118    0.629118
 H    -0.629118   -0.629118    0.629118
 H    -0.629118    0.629118   -0.629118
 H     0.629118   -0.629118   -0.629118""",
-    
+
     "Benzene": """12
 Benzene molecule
 C     1.395890    0.000000    0.000000
@@ -287,6 +283,8 @@ XC_FUNCTIONALS = {
     "PW91": "PW91",
     "BP86": "BP86",
     "BLYP": "BLYP",
+    "B3LYP": "B3LYP",
+    "PBE0": "PBE0",
     "R2SCAN": "R2SCAN",
     "TPSS": "TPSS",
     "M06L": "M06L",
@@ -305,12 +303,13 @@ PYSCF_XC_FUNCTIONALS = {
     "PW91": "109,134",
     "BP86": "106,132",
     "BLYP": "106,131",
+    "B3LYP": "B3LYP",
+    "PBE0": "PBE0",
     "R2SCAN": "497,498",
     "TPSS": "202,231",
     "M06L": "203,233",
     "TASK": "707,7",
 }
-META_GGA_FUNCTIONALS = {"R2SCAN", "TPSS", "M06L", "TASK"}
 
 BASIS_SETS = ["sto-3g", "sto-6g", "3-21G", "4-31G", "6-31G", "6-31+G", "6-31++G", "cc-pvDZ", "def2-SVP", "def2-TZVP"]
 
@@ -325,18 +324,18 @@ col1, col2 = st.columns([1.3, 1])
 
 with col1:
     st.subheader("Molecule Input")
-    
+
     # Molecule selection
     molecule_choice = st.selectbox(
         "Select example molecule or paste custom XYZ:",
         [
-            "Water", 
-            "Acetone", 
+            "Water",
+            "Acetone",
             "Tetrahydrofuran",
-            "Pyrrole", 
-            "Dimethyl Ether", 
-            "Benzene", 
-            "Carbon Dioxide", 
+            "Pyrrole",
+            "Dimethyl Ether",
+            "Benzene",
+            "Carbon Dioxide",
             "Hydrogen Peroxide",
             "Formic Acid",
             "Hydrogen Sulfide",
@@ -347,7 +346,7 @@ with col1:
             "Custom"
         ]
     )
-    
+
     if molecule_choice == "Custom":
         xyz_content = st.text_area(
             "Paste XYZ coordinates:",
@@ -368,7 +367,7 @@ with col1:
             st.markdown("### Molecule Visualization", unsafe_allow_html=True)
             viz_style = st.selectbox("Select Visualization Style:", ["ball-stick", "stick", "ball"], key="viz_style_select")
             atoms_obj = _parse_xyz_to_atoms(xyz_content)
-        
+
             # Render py3Dmol
             view_3d = get_structure_viz2(atoms_obj, style=viz_style, width=400, height=400)
             # Use components.html to insert the viewer HTML
@@ -387,632 +386,367 @@ with col1:
                 "Chemical Formula": atoms_obj.get_chemical_formula() if hasattr(atoms_obj, 'get_chemical_formula') else "".join(atoms_obj.get_chemical_symbols()),
                 "Atom Types": ", ".join(sorted(list(set(atoms_obj.get_chemical_symbols()))))
             }
-            
+
             for key, value in atoms_info.items():
                 st.write(f"**{key}:** {value}")
 
 with col1:
     st.subheader("Calculation Settings")
-    
+
     basis_set = st.selectbox("Basis Set:", BASIS_SETS, index=0)
     auxbasis = st.text_input("Auxiliary Basis:", value="def2-universal-jfit")
-    
+
     xc_functional = st.selectbox(
         "XC Functional:",
         list(XC_FUNCTIONALS.keys()),
         index=0
     )
-    
-    default_max_iterations = 14
+
+    default_max_iterations = 20
     default_conv_crit = 1e-6
     max_iterations = st.number_input("Max Iterations:", min_value=1, max_value=50, value=default_max_iterations)
     conv_crit = st.number_input("Convergence Criterion:", min_value=1e-8, max_value=1e-3, value=default_conv_crit, format="%.1e")
-    ao_basis_type = st.selectbox("AO Basis Type:", ["CAO", "SAO"], index=0)
+    ao_basis_type = st.selectbox("AO Basis Type:", ["CAO", "SAO"], index=1)
     use_sao_basis = ao_basis_type == "SAO"
     ncores = 1#st.number_input("Number of Cores:", min_value=1, max_value=8, value=4)
-    if xc_functional == "HF":
-        use_pyscf_grids = False
-    else:
-        use_pyscf_grids = st.checkbox("Use PySCF Grids for XC Term", value=True, help="Use PyFock's built-in PySCF grid generation path for the XC term. This does not perform a PySCF DFT calculation, only grid generation.")
-    compare_pyscf = st.checkbox("Compare energy with PySCF (will take longer)", value=False, help="Runs an RIHF or KS-DFT calculation using same settings in PySCF for energy comparison.")
+    grid_level = st.number_input(
+        "Grid Level:", min_value=0, max_value=5, value=3, step=1,
+        disabled=xc_functional == "HF",
+        help="PyFock grid accuracy: 0 is coarsest and 5 is finest. Not used for HF.",
+    )
+    initial_guess = st.selectbox(
+        "Initial Guess:", ["sano", "core"],
+        format_func=lambda value: "SANO" if value == "sano" else "Core",
+        help="PyFock builds the starting density from atomic natural orbitals (SANO) or the core Hamiltonian.",
+    )
 
 st.markdown("---")
 
-# Visualization settings
-st.header("2. Cube Generation and Visualization Settings")
-col3, col4, col5 = st.columns(3)
+from calculation_workflow import (
+    run_scf, calculate_forces, calculate_dipole, generate_cube,
+    compare_energy, build_input_script,
+)
 
-with col3:
-    cube_resolution = st.slider("Cube File Resolution (nx=ny=nz):", 30, 50, 40)
-with col4:
-    isovalue = st.number_input("Isovalue:", 0.0, 1.0, value=0.05, step=0.001, format="%.6f")
-with col5:
-    opacity = st.slider("Opacity:", 0.0, 1.0, value=0.90, step=0.01)
+settings = dict(
+    xyz_content=xyz_content, basis_set=basis_set, auxbasis=auxbasis,
+    xc_functional=xc_functional, grid_level=int(grid_level),
+    initial_guess=initial_guess, conv_crit=float(conv_crit),
+    max_iterations=int(max_iterations), ncores=ncores, use_sao_basis=use_sao_basis,
+)
 
-
-
-st.markdown("---")
-
-# Run calculation button
 if st.button("🚀 Run DFT Calculation", type="primary"):
-    
-    # Validate XYZ input
-    if not xyz_content.strip():
-        st.error("Please provide XYZ coordinates!")
-        st.stop()
-    
-    
-    
-    # Progress tracking
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
+    log = _io.StringIO()
     try:
-        # Capture stdout/stderr into buffer and show later in the app
-        log_buffer = _io.StringIO()
-        with contextlib.redirect_stdout(log_buffer), contextlib.redirect_stderr(log_buffer):
-            # Setup environment variables
-            status_text.text("Setting up environment...")
-            progress_bar.progress(5)
-            
-            os.environ['OMP_NUM_THREADS'] = str(ncores)
-            os.environ["OPENBLAS_NUM_THREADS"] = str(ncores)
-            os.environ["MKL_NUM_THREADS"] = str(ncores)
-            os.environ["VECLIB_MAXIMUM_THREADS"] = str(ncores)
-            os.environ["NUMEXPR_NUM_THREADS"] = str(ncores)
-            
-            # Import PyFock modules
-            status_text.text("Importing PyFock modules...")
-            progress_bar.progress(10)
-            
-            from pyfock import Basis, Mol, DFT, Utils
-            
-            # Create temporary XYZ file
-            status_text.text("Creating molecule object...")
-            progress_bar.progress(15)
-            
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.xyz', delete=False) as f:
-                f.write(xyz_content)
-                xyz_file = f.name
-            
-            # Initialize molecule
-            mol = Mol(coordfile=xyz_file)
-            
-            # Initialize basis sets
-            status_text.text(f"Loading basis set: {basis_set}...")
-            progress_bar.progress(20)
-            
-            basis = Basis(mol, {'all': Basis.load(mol=mol, basis_name=basis_set)})
-            auxbasis_obj = Basis(mol, {'all': Basis.load(mol=mol, basis_name=auxbasis)})
-            
-            # Check actual basis function count
-            n_basis = basis.bfs_nao
-            if n_basis > 120:
-                st.error(f"❌ This system has {n_basis} basis functions, exceeding the limit of 120. Please use a smaller basis set or fewer atoms.")
-                os.unlink(xyz_file)
-                st.stop()
-            
-            st.info(f"✓ System has {n_basis} basis functions (within limit)")
-            
-            funcidcrysx = XC_FUNCTIONALS[xc_functional]
+        if not xyz_content.strip():
+            raise ValueError("Please provide XYZ coordinates.")
+        with st.spinner("Running SCF calculation..."):
+            with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                completed = run_scf(settings)
+        completed['log'] = log.getvalue()
+        st.session_state.scf_result = completed
+        st.session_state.pop('scf_error', None)
+    except Exception as exc:
+        st.session_state.scf_error = (str(exc), log.getvalue())
 
-            status_text.text("Preparing calculation...")
-            progress_bar.progress(22)
+if 'scf_error' in st.session_state:
+    error, error_log = st.session_state.scf_error
+    st.error(f"Calculation failed: {error}")
+    with st.expander("Failed calculation output"):
+        st.code(strip_ansi(error_log))
 
-            # Initialize DFT object
-            status_text.text("Initializing DFT calculation...")
-            progress_bar.progress(25)
-            
-            dftObj = DFT(mol, basis, auxbasis_obj, xc=funcidcrysx, gridsLevel=3, use_pyscf_grids=use_pyscf_grids)
-            dftObj.conv_crit = conv_crit
-            dftObj.max_itr = max_iterations
-            dftObj.ncores = ncores
-            dftObj.save_ao_values = True
-            dftObj.sao = use_sao_basis
-            if xc_functional == "HF":
-                dftObj.DF_algo = 1  # Use RIHF for HF calculations (preliminary)
-            
-            # Run SCF calculation
-            status_text.text("Running SCF calculation... This may take a few moments.")
-            progress_bar.progress(30)
-            
-            start_time = time.time()
-            energyPyFock, dmat = dftObj.scf()
-            pyfock_time = time.time() - start_time
-            
-            progress_bar.progress(50)
-            
-            # Display results
-            if dftObj.converged:
-                st.success(f"✅ PyFock KS-DFT calculation converged in {pyfock_time:.2f} seconds and {dftObj.niter} iterations!")
-            else:
-                st.warning(f"⚠️ PyFock KS-DFT calculation did not converge in {dftObj.niter} iterations and {pyfock_time:.2f} seconds!")
-
-            def get_cube_mo_coeff(mo_idx):
-                mo_coeff = dftObj.mo_coefficients[:, int(mo_idx)]
-                if use_sao_basis and mo_coeff.shape[0] != basis.bfs_nao:
-                    mo_coeff = basis.cart2sph_basis().T @ mo_coeff
-                return mo_coeff
-            
-            st.header("3. Results")
-            
-            # Energy and basic properties
-            col6, col7, col8 = st.columns(3)
-            
-            with col6:
-                st.metric("Total Energy (PyFock)", f"{energyPyFock:.8f} Ha")
-                
-                with st.expander("Energy Components"):
-                    import pandas as pd
-                    energy_df = pd.DataFrame({
-                        "Component": [
-                            "Kinetic Energy",
-                            "Nuclear-Electron Attraction", 
-                            "Electron-Electron Repulsion",
-                            "Exchange-Correlation",
-                            "Nuclear Repulsion"
-                        ],
-                        "Energy (Ha)": [
-                            f"{dftObj.Kinetic_energy:.8f}",
-                            f"{dftObj.Nuc_energy:.8f}",
-                            f"{dftObj.J_energy:.8f}",
-                            "N/A" if dftObj.XC_energy is None else f"{dftObj.XC_energy:.8f}",
-                            f"{dftObj.Nuclear_repulsion_energy:.8f}"
-                        ]
-                    })
-                    st.dataframe(energy_df, hide_index=True, use_container_width=True)
-            
-            with col7:
-                # Calculate HOMO-LUMO gap
-                occupied = np.where(dftObj.mo_occupations > 1e-8)[0]
-                if len(occupied) > 0 and len(occupied) < len(dftObj.mo_energies):
-                    homo_idx = occupied[-1]
-                    lumo_idx = homo_idx + 1
-                    homo_energy = dftObj.mo_energies[homo_idx]
-                    lumo_energy = dftObj.mo_energies[lumo_idx]
-                    gap = (lumo_energy - homo_energy) * 27.2114  # Convert to eV
-                    st.metric("HOMO-LUMO Gap", f"{gap:.4f} eV")
-                else:
-                    homo_idx = None
-                    lumo_idx = None
-                    st.metric("HOMO-LUMO Gap", "N/A")
-            
-            with col8:
-                st.metric("SCF Iterations", f"{dftObj.niter}")
-                
-                with st.expander("SCF Convergence Details"):
-                    # Create a DataFrame for the energies
-                    import pandas as pd
-                    scf_data = pd.DataFrame({
-                        'Iteration': range(1, len(dftObj.scf_energies) + 1),
-                        'Energy (Ha)': dftObj.scf_energies
-                    })
-                    
-                    # Calculate energy change between iterations
-                    scf_data['ΔE (Ha)'] = scf_data['Energy (Ha)'].diff()
-                    
-                    # Display the table
-                    st.dataframe(scf_data, use_container_width=True, hide_index=True)
-                    
-                    # Plot convergence
-                    import plotly.graph_objects as go
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=scf_data['Iteration'],
-                        y=scf_data['Energy (Ha)'],
-                        mode='lines+markers',
-                        name='Energy',
-                        line=dict(color='#1f77b4', width=2),
-                        marker=dict(size=6)
-                    ))
-                    
-                    fig.update_layout(
-                        title='SCF Energy Convergence',
-                        xaxis_title='Iteration',
-                        yaxis_title='Energy (Hartree)',
-                        hovermode='x unified',
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-            
-            # MO energies
-            st.subheader("Molecular Orbital Energies")
-            mo_energies_ev = dftObj.mo_energies * 27.2114  # Convert to eV
-            
-            col9, col10 = st.columns(2)
-            with col9:
-                if homo_idx is not None:
-                    st.write(f"**HOMO (orbital {homo_idx}):** {mo_energies_ev[homo_idx]:.4f} eV")
-            with col10:
-                if lumo_idx is not None:
-                    st.write(f"**LUMO (orbital {lumo_idx}):** {mo_energies_ev[lumo_idx]:.4f} eV")
-            
-            # Show MO energies
-            with st.expander("View All MO Energies"):
-                mo_data = {
-                    "Orbital": list(range(len(mo_energies_ev))),
-                    "Energy (eV)": [f"{e:.6f}" for e in mo_energies_ev],
-                    "Occupation": dftObj.mo_occupations
-                }
-                st.dataframe(mo_data, height=300)
-            # Density matrix expander and download ===
-            with st.expander("Density Matrix (dmat) — view / download"):
-                try:
-                    st.write(dmat)
-                    
-                except Exception as e:
-                    st.write("Failed to show density matrix:", str(e))
-
-            # Generate cube files
-            status_text.text("Generating cube files for visualization...")
-            progress_bar.progress(60)
-            
-            cube_files = {}
-            
-            if homo_idx is not None:
-                # HOMO cube
-                status_text.text("Generating HOMO cube file...")
-                with tempfile.NamedTemporaryFile(mode='w', suffix='_HOMO.cube', delete=False) as f:
-                    homo_cube_file = f.name
-                
-                Utils.write_orbital_cube(
-                    mol, basis, get_cube_mo_coeff(homo_idx),
-                    homo_cube_file, nx=cube_resolution, ny=cube_resolution, nz=cube_resolution,
-                    ncores=ncores
-                )
-                
-                with open(homo_cube_file, 'r') as f:
-                    cube_files['HOMO'] = f.read()
-                
-                progress_bar.progress(70)
-            
-            if lumo_idx is not None:
-                # LUMO cube
-                status_text.text("Generating LUMO cube file...")
-                with tempfile.NamedTemporaryFile(mode='w', suffix='_LUMO.cube', delete=False) as f:
-                    lumo_cube_file = f.name
-                
-                Utils.write_orbital_cube(
-                    mol, basis, get_cube_mo_coeff(lumo_idx),
-                    lumo_cube_file, nx=cube_resolution, ny=cube_resolution, nz=cube_resolution,
-                    ncores=ncores
-                )
-                
-                with open(lumo_cube_file, 'r') as f:
-                    cube_files['LUMO'] = f.read()
-                
-                progress_bar.progress(80)
-            
-            # Density cube
-            status_text.text("Generating electron density cube file...")
-            with tempfile.NamedTemporaryFile(mode='w', suffix='_density.cube', delete=False) as f:
-                density_cube_file = f.name
-            
-            Utils.write_density_cube(
-                mol, basis, dftObj.dmat,
-                density_cube_file, nx=cube_resolution, ny=cube_resolution, nz=cube_resolution,
-                ncores=ncores
-            )
-            
-            with open(density_cube_file, 'r') as f:
-                cube_files['Density'] = f.read()
-            
-            progress_bar.progress(85)
-            
-            
-            
-            # Display visualizations side-by-side
-            st.subheader("4. Visualizations")
-            # create columns for HOMO, LUMO and Density (as available)
-            vis_cols = []
-            num_vis = len([k for k in cube_files.keys() if cube_files.get(k)])
-            if num_vis == 0:
-                st.info("No cube visualizations available.")
-            else:
-                # Arrange into up to three columns side-by-side
-                if 'HOMO' in cube_files and 'LUMO' in cube_files and 'Density' in cube_files:
-                    c1, c2, c3 = st.columns(3)
-                    vis_cols = [c1, c2, c3]
-                    mapping = [('HOMO', c1), ('LUMO', c2), ('Density', c3)]
-                else:
-                    # pack present visualizations into equal columns
-                    keys_present = list(cube_files.keys())
-                    cols = st.columns(len(keys_present))
-                    vis_cols = cols
-                    mapping = list(zip(keys_present, cols))
-                
-                for title, col in mapping:
-                    if title in cube_files:
-                        with col:
-                            st.markdown(f"#### {title}")
-                            html_blob = visualize_cube_in_component(cube_files[title], title, isovalue, opacity)
-                            components.html(html_blob, height=380, width=420)
-
-            col14, col15, col16 = st.columns(3)
-            
-            # Helper to create base64 download links (avoids widget-triggered reruns)
-            def make_download_link(content, filename, mimetype="text/plain"):
-                if isinstance(content, str):
-                    b = content.encode()
-                else:
-                    b = content
-                b64 = base64.b64encode(b).decode()
-                return f'<a href="data:{mimetype};base64,{b64}" download="{filename}">📥 Download {filename}</a>'
-            
-            with col14:
-                if 'HOMO' in cube_files:
-                    st.markdown(make_download_link(cube_files['HOMO'], "homo.cube"), unsafe_allow_html=True)
-            
-            with col15:
-                if 'LUMO' in cube_files:
-                    st.markdown(make_download_link(cube_files['LUMO'], "lumo.cube"), unsafe_allow_html=True)
-            
-            with col16:
-                if 'Density' in cube_files:
-                    st.markdown(make_download_link(cube_files['Density'], "density.cube"), unsafe_allow_html=True)
-            
-            progress_bar.progress(90)
-            
-            # === Allow visualizing any orbital ===
-            @st.fragment
-            def func_viz_any_mo():
-                st.subheader("Visualize any MO")
-                mo_idx_choice = None
-                if hasattr(dftObj, 'mo_energies'):
-                    max_orb = len(dftObj.mo_energies) - 1
-                    # Show a slider/selectbox to pick orbital
-                    mo_idx_choice = st.number_input("Select orbital index to visualize:", min_value=0, max_value=max_orb, value=homo_idx if homo_idx is not None else 0, step=1)
-                    # if st.button("Generate and Show Selected MO", key="gen_orb_btn"):
-                    status_text.text(f"Generating cube for MO index {mo_idx_choice} ...")
-                    with tempfile.NamedTemporaryFile(mode='w', suffix=f'_MO{mo_idx_choice}.cube', delete=False) as f:
-                        mo_cube_file = f.name
-                    Utils.write_orbital_cube(
-                        mol, basis, get_cube_mo_coeff(mo_idx_choice),
-                        mo_cube_file, nx=cube_resolution, ny=cube_resolution, nz=cube_resolution,
-                        ncores=ncores
-                    )
-                    with open(mo_cube_file, 'r') as f:
-                        cube_files[f"MO_{mo_idx_choice}"] = f.read()
-                    # show it in a small area
-                    html_blob = visualize_cube_in_component(cube_files[f"MO_{mo_idx_choice}"], f"MO {mo_idx_choice}", isovalue, opacity)
-                    st.markdown(f"#### MO {mo_idx_choice}")
-                    components.html(html_blob, height=380, width=420)
-            
-            func_viz_any_mo()
-                
-            
-            # PySCF comparison
-            if compare_pyscf:
-                status_text.text("Running PySCF calculation for comparison...")
-                
-                try:
-                    molPySCF = gto.Mole()
-                    molPySCF.atom = xyz_file
-                    molPySCF.basis = basis_set
-                    molPySCF.cart = not use_sao_basis
-                    molPySCF.verbose = 5
-                    molPySCF.build()
-
-                    if xc_functional == "HF":
-                        mf = scf.RHF(molPySCF).density_fit(auxbasis=auxbasis)
-                    else:
-                        mf = dft.rks.RKS(molPySCF).density_fit(auxbasis=auxbasis)
-                        mf.xc = PYSCF_XC_FUNCTIONALS[xc_functional]
-                        mf.grids.level = dftObj.gridsLevel
-                        # if getattr(dftObj, "grids", None) is not None:
-                        #     mf.grids.coords = dftObj.grids.coords
-                        #     mf.grids.weights = dftObj.grids.weights
-                        #     mf.grids.build = lambda *args, **kwargs: None
-                    # mf.direct_scf = False
-                    mf.conv_tol = conv_crit
-                    mf.max_cycle = max_iterations
-
-                    start_pyscf = time.time()
-                    dmat_pyscf_init = mf.init_guess_by_1e(molPySCF)
-                    energyPySCF = mf.kernel(dm0=dmat_pyscf_init)
-                    pyscf_time = time.time() - start_pyscf
-                    
-                    st.subheader("5. Comparison with PySCF")
-                    
-                    col11, col12, col13 = st.columns(3)
-                    
-                    with col11:
-                        st.metric("PySCF Energy", f"{energyPySCF:.8f} Ha")
-                    
-                    with col12:
-                        energy_diff = abs(energyPyFock - energyPySCF) * 1000  # in mHa
-                        st.metric("Energy Difference", f"{energy_diff:.6f} mHa")
-                    
-                    with col13:
-                        speedup = pyscf_time / pyfock_time
-                        # st.metric("PyFock Speedup", f"{speedup:.2f}x" if speedup > 1 else f"{1/speedup:.2f}x slower")
-                
-                        # st.write(f"**PyFock time:** {pyfock_time:.2f} s | **PySCF time:** {pyscf_time:.2f} s")
-                    
-                except Exception as e:
-                    st.warning(f"PySCF comparison failed: {str(e)}")
-            
-            progress_bar.progress(95)
-            
-            # Downloads section
-            st.subheader("6. INPUT Script Generation")
-            
-            
-            
-            
-            
-            
-            
-            # Generate Python script
-            status_text.text("Generating Python script...")
-            
-            python_script = """# PyFock DFT Calculation Script
-# Generated by PyFock GUI
-
-import os
-ncores = {ncores}
-os.environ['OMP_NUM_THREADS'] = str(ncores)
-os.environ["OPENBLAS_NUM_THREADS"] = str(ncores)
-os.environ["MKL_NUM_THREADS"] = str(ncores)
-os.environ["VECLIB_MAXIMUM_THREADS"] = str(ncores)
-os.environ["NUMEXPR_NUM_THREADS"] = str(ncores)
-
-from pyfock import Basis, Mol, DFT, Utils
-import numpy as np
-
-# XYZ coordinates
-xyz_content = \"\"\"
-{xyz_content}
-\"\"\"
-
-# Save XYZ to file
-with open('molecule.xyz', 'w') as f:
-    f.write(xyz_content)
-
-# Calculation parameters
-basis_set_name = '{basis_set}'
-auxbasis_name = '{auxbasis}'
-xc_functional = {xc_functional!r}
-
-# Initialize molecule and basis
-mol = Mol(coordfile='molecule.xyz')
-basis = Basis(mol, {{'all': Basis.load(mol=mol, basis_name=basis_set_name)}})
-auxbasis = Basis(mol, {{'all': Basis.load(mol=mol, basis_name=auxbasis_name)}})
-
-# Setup DFT calculation
-dftObj = DFT(mol, basis, auxbasis, xc=xc_functional, use_pyscf_grids={use_pyscf_grids})
-dftObj.conv_crit = {conv_crit}
-dftObj.max_itr = {max_iterations}
-dftObj.ncores = ncores
-dftObj.save_ao_values = True
-dftObj.sao = {use_sao_basis}
-# if xc_functional == "HF":
-#     dftObj.DF_algo = 1
-
-# Run SCF
-energy, dmat = dftObj.scf()
-
-print(f"Total Energy: {{energy:.8f}} Ha")
-
-def get_cube_mo_coeff(mo_idx):
-    mo_coeff = dftObj.mo_coefficients[:, int(mo_idx)]
-    if dftObj.sao and mo_coeff.shape[0] != basis.bfs_nao:
-        mo_coeff = basis.cart2sph_basis().T @ mo_coeff
-    return mo_coeff
-
-# Find HOMO and LUMO
-occupied = np.where(dftObj.mo_occupations > 1e-8)[0]
-if len(occupied) > 0 and len(occupied) < len(dftObj.mo_energies):
-    homo_idx = occupied[-1]
-    lumo_idx = homo_idx + 1
-    
-    # Generate cube files
-    Utils.write_orbital_cube(mol, basis, get_cube_mo_coeff(homo_idx), 
-                            'HOMO.cube', nx={cube_resolution}, ny={cube_resolution}, 
-                            nz={cube_resolution}, ncores=ncores)
-    
-    Utils.write_orbital_cube(mol, basis, get_cube_mo_coeff(lumo_idx), 
-                            'LUMO.cube', nx={cube_resolution}, ny={cube_resolution}, 
-                            nz={cube_resolution}, ncores=ncores)
-
-# Generate density cube
-Utils.write_density_cube(mol, basis, dftObj.dmat, 'density.cube', 
-                        nx={cube_resolution}, ny={cube_resolution}, 
-                        nz={cube_resolution}, ncores=ncores)
-
-print("Cube files generated successfully!")
-"""
-            parameters = {
-                'ncores': ncores,
-                'xyz_content': xyz_content,
-                'basis_set': basis_set,
-                'auxbasis': auxbasis, # Often a different basis set for auxiliary functions
-                'xc_functional': funcidcrysx,
-                'use_sao_basis': use_sao_basis,
-                'use_pyscf_grids': use_pyscf_grids,
-                'conv_crit': conv_crit,
-                'max_iterations': max_iterations,
-                'cube_resolution': cube_resolution
-            }
-            python_script = python_script.format(**parameters)
-            with st.expander("Input Script to Run the Above PyFock Calculation"):
-                st.code(python_script, language='python')
-            # Provide script as base64 link (no rerun on click)
-            st.markdown(make_download_link(python_script, "pyfock_calculation.py", mimetype="text/x-python"), unsafe_allow_html=True)
-            
-            progress_bar.progress(100)
-            status_text.text("✅ All tasks completed!")
-            
-            # === Show captured stdout/stderr logs ===
-            st.subheader("7. Calculation Log Output")
-            log_buffer.seek(0)
-            log_text = log_buffer.read()
-            if log_text.strip():
-                st.code(strip_ansi(log_text))
-            else:
-                st.write("No log output was captured.")
-            
-            
-            # Cleanup
-            os.unlink(xyz_file)
-            if 'homo_cube_file' in locals():
-                os.unlink(homo_cube_file)
-            if 'lumo_cube_file' in locals():
-                os.unlink(lumo_cube_file)
-            if 'density_cube_file' in locals():
-                os.unlink(density_cube_file)
-            if 'mo_cube_file' in locals():
-                try:
-                    os.unlink(mo_cube_file)
-                except Exception:
-                    pass
-
-    except ImportError as e:
-        st.error(f"❌ Import Error: {str(e)}")
-        st.info("Make sure PyFock is installed: `pip install pyfock`")
-        progress_bar.empty()
-        status_text.empty()
-    except Exception as e:
-        st.error(f"❌ Calculation failed: {str(e)}")
-        st.info("Please check your input parameters and try again.")
-        progress_bar.empty()
-        status_text.empty()
-        
-        # Cleanup on error
-        if 'xyz_file' in locals():
-            try:
-                os.unlink(xyz_file)
-            except:
-                pass
-
+result = st.session_state.get('scf_result')
+if result is None:
+    st.info("Choose your settings and run DFT. Forces, dipole moments, and orbital or density plots become available after SCF.")
 else:
-    # Initial instructions
-    st.info("👆 Configure your calculation parameters above and click 'Run DFT Calculation' to start!")
-    
-    st.markdown("""
-    ### Getting Started
-    
-    1. **Choose a molecule**: Select from examples or paste your own XYZ coordinates
-    2. **Select calculation parameters**: Basis set, functional, convergence criteria
-    3. **Adjust visualization settings**: Cube resolution, isovalue, opacity
-    4. **Run calculation**: Click the button above
-    5. **Explore results**: View energies, MO properties, and 3D visualizations
-    6. **Download**: Get cube files and a Python script to reproduce the calculation
-    
-    ### Notes
-    
-    - Calculations are limited to ~120 basis functions when running on cloud. Download the repo and run the streamlit app locally for larger systems.
-    - Smaller molecules and basis sets will run faster.
-    - PySCF comparison adds computation time but validates energy.
-    - All calculations use density fitting (resolution of identity) for efficiency.
-    
-    ### Example Systems
-    
-    - **Water**: Quick test system (7 basis functions with sto-3g)
-    - **Benzene**: Aromatic system (42 basis functions with sto-3g)
-    """)
+    dftObj = result['dft']
+    dmat = result['dmat']
+    energyPyFock = result['energy']
+    if result['settings'] != settings:
+        st.info("The results below belong to the last completed calculation. Run DFT to apply your changed settings.")
+    saved = result['settings']
+    st.caption(f"Completed calculation: {saved['xc_functional']} · {saved['basis_set']} · {'SAO' if saved['use_sao_basis'] else 'CAO'} · grid {saved['grid_level']} · {saved['initial_guess'].upper()} guess")
+    st.header("2. SCF Results")
+    if dftObj.converged:
+        st.success(f"SCF converged in {dftObj.niter} iterations ({result['elapsed']:.2f} seconds).")
+    else:
+        st.warning(f"SCF did not converge in {dftObj.niter} iterations. Properties from this density may be inaccurate; forces require convergence.")
+    # Energy and basic properties
+    col6, col7, col8 = st.columns(3)
+
+    with col6:
+        st.metric("Total Energy (PyFock)", f"{energyPyFock:.8f} Ha")
+
+        with st.expander("Energy Components"):
+            import pandas as pd
+            energy_df = pd.DataFrame({
+                "Component": [
+                    "Kinetic Energy",
+                    "Nuclear-Electron Attraction",
+                    "Electron-Electron Repulsion",
+                    "Exchange-Correlation",
+                    "Nuclear Repulsion",
+                    "Exact Exchange",
+                    "ECP"
+                ],
+                "Energy (Ha)": [
+                    f"{dftObj.Kinetic_energy:.8f}",
+                    f"{dftObj.Nuc_energy:.8f}",
+                    f"{dftObj.J_energy:.8f}",
+                    "N/A" if dftObj.XC_energy is None else f"{dftObj.XC_energy:.8f}",
+                    f"{dftObj.Nuclear_repulsion_energy:.8f}",
+                    f"{getattr(dftObj, 'Exx_energy', 0.0):.8f}",
+                    f"{getattr(dftObj, 'ECP_energy', 0.0):.8f}"
+                ]
+            })
+            st.dataframe(energy_df, hide_index=True, use_container_width=True)
+
+    with col7:
+        # Calculate HOMO-LUMO gap
+        occupied = np.where(dftObj.mo_occupations > 1e-8)[0]
+        if len(occupied) > 0 and len(occupied) < len(dftObj.mo_energies):
+            homo_idx = occupied[-1]
+            lumo_idx = homo_idx + 1
+            homo_energy = dftObj.mo_energies[homo_idx]
+            lumo_energy = dftObj.mo_energies[lumo_idx]
+            gap = (lumo_energy - homo_energy) * 27.2114  # Convert to eV
+            st.metric("HOMO-LUMO Gap", f"{gap:.4f} eV")
+        else:
+            homo_idx = None
+            lumo_idx = None
+            st.metric("HOMO-LUMO Gap", "N/A")
+
+    with col8:
+        st.metric("SCF Iterations", f"{dftObj.niter}")
+
+        with st.expander("SCF Convergence Details"):
+            # Create a DataFrame for the energies
+            import pandas as pd
+            scf_data = pd.DataFrame({
+                'Iteration': range(1, len(dftObj.scf_energies) + 1),
+                'Energy (Ha)': dftObj.scf_energies
+            })
+
+            # Calculate energy change between iterations
+            scf_data['ΔE (Ha)'] = scf_data['Energy (Ha)'].diff()
+
+            # Display the table
+            st.dataframe(scf_data, use_container_width=True, hide_index=True)
+
+            # Plot convergence
+            import plotly.graph_objects as go
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=scf_data['Iteration'],
+                y=scf_data['Energy (Ha)'],
+                mode='lines+markers',
+                name='Energy',
+                line=dict(color='#1f77b4', width=2),
+                marker=dict(size=6)
+            ))
+
+            fig.update_layout(
+                title='SCF Energy Convergence',
+                xaxis_title='Iteration',
+                yaxis_title='Energy (Hartree)',
+                hovermode='x unified',
+                height=400
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    # MO energies
+    st.subheader("Molecular Orbital Energies")
+    mo_energies_ev = dftObj.mo_energies * 27.2114  # Convert to eV
+
+    col9, col10 = st.columns(2)
+    with col9:
+        if homo_idx is not None:
+            st.write(f"**HOMO (orbital {homo_idx}):** {mo_energies_ev[homo_idx]:.4f} eV")
+    with col10:
+        if lumo_idx is not None:
+            st.write(f"**LUMO (orbital {lumo_idx}):** {mo_energies_ev[lumo_idx]:.4f} eV")
+
+    # Show MO energies
+    with st.expander("View All MO Energies"):
+        mo_data = {
+            "Orbital": list(range(len(mo_energies_ev))),
+            "Energy (eV)": [f"{e:.6f}" for e in mo_energies_ev],
+            "Occupation": dftObj.mo_occupations
+        }
+        st.dataframe(mo_data, height=300)
+    # Density matrix expander and download ===
+    with st.expander("Density Matrix (dmat) — view / download"):
+        try:
+            st.write(dmat)
+
+        except Exception as e:
+            st.write("Failed to show density matrix:", str(e))
+
+
+    st.download_button("Download density matrix", pd.DataFrame(dmat).to_csv(index=False), "density_matrix.csv", "text/csv")
+    script_container = st.container()
+    output_container = st.container()
+
+    st.header("3. Optional Calculations")
+    st.caption("These actions use the saved SCF result. Changing plot settings does not repeat SCF or generate cubes.")
+
+    def perform_action(label, action, compute, save):
+        log = _io.StringIO()
+        try:
+            with st.spinner(label):
+                with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                    value = compute()
+            save(value)
+            if action not in result['actions']:
+                result['actions'].append(action)
+        except Exception as exc:
+            st.error(f"{label} failed: {exc}")
+        finally:
+            result['log'] += f"\n--- {label} ---\n" + log.getvalue()
+
+    force_col, dipole_col, reference_col = st.columns(3)
+    with force_col:
+        force_supported = dftObj.converged and dftObj.xc != 'HF' and getattr(dftObj, 'exx_coef', 0.0) == 0 and dftObj.isDF
+        if st.button("Calculate forces", disabled=not force_supported or result['forces'] is not None):
+            perform_action("Calculating forces", {'kind': 'forces'},
+                           lambda: calculate_forces(result), lambda value: result.update(forces=value))
+        if not force_supported:
+            st.caption("PyFock analytical forces require converged, density-fitted, pure DFT. HF and hybrids currently require numerical forces with additional SCF runs.")
+    with dipole_col:
+        if st.button("Calculate dipole moment", disabled=result['dipole'] is not None):
+            perform_action("Calculating dipole moment", {'kind': 'dipole'},
+                           lambda: calculate_dipole(result), lambda value: result.update(dipole=value))
+    with reference_col:
+        if st.button("Compare energy with PySCF", disabled=result['comparison'] is not None):
+            perform_action("PySCF comparison", {'kind': 'comparison', 'xc': PYSCF_XC_FUNCTIONALS.get(saved['xc_functional'], 'HF')},
+                           lambda: compare_energy(result, PYSCF_XC_FUNCTIONALS), lambda value: result.update(comparison=value))
+
+    if result['forces'] is not None:
+        st.subheader("Atomic Forces")
+        forces = pd.DataFrame(result['forces'], columns=['Fx (Ha/Bohr)', 'Fy (Ha/Bohr)', 'Fz (Ha/Bohr)'])
+        forces.insert(0, 'Atom', _parse_xyz_to_atoms(saved['xyz_content']).get_chemical_symbols())
+        st.dataframe(forces, hide_index=True)
+        st.download_button("Download forces", forces.to_csv(index=False), "forces.csv", "text/csv")
+        atoms = _parse_xyz_to_atoms(saved['xyz_content'])
+        force_vectors = np.asarray(result['forces'])
+        force_norms = np.linalg.norm(force_vectors, axis=1)
+        maximum_force = float(force_norms.max())
+        view = get_structure_viz2(atoms, style='ball-stick', width=700, height=450)
+        if maximum_force > 1e-10:
+            arrow_scale = st.slider("Force arrow scale", 0.2, 2.0, 1.0, 0.1)
+            molecule_size = max(float(np.ptp(atoms.positions, axis=0).max()), 1.0)
+            display_scale = 0.65 * molecule_size * arrow_scale / maximum_force
+            for index, (position, force, norm) in enumerate(zip(atoms.positions, force_vectors, force_norms)):
+                if norm <= 1e-10:
+                    continue
+                end = position + force * display_scale
+                view.addArrow({
+                    'start': dict(zip(('x', 'y', 'z'), position.tolist())),
+                    'end': dict(zip(('x', 'y', 'z'), end.tolist())),
+                    'radius': 0.06, 'radiusRatio': 2.5, 'mid': 0.75,
+                    'color': '#e45756',
+                })
+                view.addLabel(f'F{index + 1}', {
+                    'position': dict(zip(('x', 'y', 'z'), end.tolist())),
+                    'fontColor': '#e45756', 'backgroundOpacity': 0,
+                    'fontSize': 16,
+                })
+            view.zoomTo()
+            view.zoom(0.8)
+        components.html(view._make_html(), height=470)
+        if maximum_force > 1e-10:
+            st.caption("Each arrow starts at its atom and points along its force. All arrows share one display scale, so their relative lengths reflect force magnitudes. F1, F2, … follow the atom order above. Drag to rotate; adjusting the scale does not recalculate forces.")
+        else:
+            st.caption("All forces are effectively zero; no direction arrows are shown.")
+        with st.expander("How forces are calculated", expanded=True):
+            st.latex(r"\mathbf{F}_A = -\nabla_{\mathbf{R}_A} E_{\mathrm{tot}}, \qquad F_{A\alpha} = -\frac{\partial E_{\mathrm{tot}}}{\partial R_{A\alpha}},\quad \alpha\in\{x,y,z\}")
+            st.markdown("The force on atom **A** is the negative derivative of the total energy with respect to its position **Rₐ**. It points toward decreasing energy. PyFock evaluates analytical derivatives from the saved, converged SCF result, including the basis-motion (Pulay) terms. Forces are reported in **Hartree/Bohr**.")
+    if result['dipole'] is not None:
+        dipole = result['dipole'] * 2.541746473
+        st.subheader("Dipole Moment")
+        st.metric("Total dipole", f"{np.linalg.norm(dipole):.5f} Debye")
+        st.dataframe(pd.DataFrame({'Component': ['X', 'Y', 'Z'], 'Dipole (Debye)': dipole}), hide_index=True)
+        atoms = _parse_xyz_to_atoms(saved['xyz_content'])
+        positions = atoms.positions
+        center = positions.mean(axis=0)
+        magnitude = np.linalg.norm(dipole)
+        length = max(float(np.ptp(positions, axis=0).max()), 1.0)
+        vector = dipole / magnitude * length if magnitude > 1e-10 else np.zeros(3)
+        end = center + vector
+        view = get_structure_viz2(atoms, style='ball-stick', width=700, height=450)
+        if magnitude > 1e-10:
+            view.addArrow({
+                'start': dict(zip(('x', 'y', 'z'), center.tolist())),
+                'end': dict(zip(('x', 'y', 'z'), end.tolist())),
+                'radius': 0.08, 'radiusRatio': 2.5, 'mid': 0.75,
+                'color': '#e45756',
+            })
+            view.addLabel('μ', {
+                'position': dict(zip(('x', 'y', 'z'), end.tolist())),
+                'fontColor': '#e45756', 'backgroundOpacity': 0,
+                'fontSize': 24,
+            })
+            view.zoomTo()
+            view.zoom(0.8)
+        components.html(view._make_html(), height=470)
+        if magnitude > 1e-10:
+            st.caption("The dipole vector points from negative toward positive charge. Arrow length is scaled for visibility. Drag to rotate the molecule and vector together.")
+        else:
+            st.caption("The dipole is effectively zero, so it has no defined direction.")
+        with st.expander("How the dipole moment is calculated", expanded=True):
+            st.latex(r"\boldsymbol{\mu} = \sum_A Z_A\mathbf{R}_A - \int \mathbf{r}\,\rho(\mathbf{r})\,d^3r")
+            st.latex(r"\mu_\alpha = \sum_A Z_A R_{A\alpha} - \sum_{ij} D_{ji}\langle\chi_i|r_\alpha|\chi_j\rangle, \qquad \alpha\in\{x,y,z\}")
+            st.markdown("In atomic units, the dipole is the nuclear contribution minus the electronic contribution. **Zₐ** is the nuclear charge (the effective ionic charge when using an ECP), **Rₐ** is the nuclear position, and **ρ** is the electron number density. **D** is the saved density matrix and **χᵢ** are the atomic basis functions; PyFock evaluates their position integrals without rerunning SCF. Coordinates are measured from the XYZ origin, in Bohr.")
+            st.latex(r"1\ e a_0 = 2.541746473\ \mathrm{Debye}, \qquad |\boldsymbol{\mu}|=\sqrt{\mu_x^2+\mu_y^2+\mu_z^2}")
+    if result['comparison'] is not None:
+        comparison = result['comparison']
+        st.subheader("PySCF Comparison")
+        st.metric("PySCF energy", f"{comparison['energy']:.8f} Ha")
+        st.metric("Absolute energy difference", f"{abs(comparison['energy'] - result['energy'])*1000:.6f} mHa")
+        if not comparison['converged']:
+            st.warning("The PySCF reference did not converge.")
+
+    with st.expander("MO and Density Plots", expanded=bool(result['cubes'])):
+        cube_resolution = st.slider("Cube File Resolution (nx=ny=nz):", 30, 50, 40)
+        isovalue = st.number_input("Isovalue:", 0.001, 1.0, value=0.05, step=0.001, format="%.6f")
+        opacity = st.slider("Opacity:", 0.0, 1.0, value=0.90, step=0.01)
+        orbital = st.number_input("Orbital index (0-based):", min_value=0, max_value=len(dftObj.mo_energies)-1,
+                                  value=int(homo_idx) if homo_idx is not None else 0, step=1)
+        requests = []
+        buttons = st.columns(3)
+        if buttons[0].button("Plot selected MO"):
+            requests.append(int(orbital))
+        if buttons[1].button("Plot HOMO and LUMO", disabled=homo_idx is None):
+            requests.extend([int(homo_idx), int(lumo_idx)])
+        if buttons[2].button("Plot electron density"):
+            requests.append(None)
+        for index in requests:
+            key = (index, cube_resolution)
+            if key not in result['cubes']:
+                action = {'kind': 'cube', 'orbital': index, 'resolution': cube_resolution}
+                perform_action("Generating cube", action, lambda: generate_cube(result, index, cube_resolution),
+                               lambda value: result['cubes'].update({key: value}))
+        for (index, resolution), content in result['cubes'].items():
+            title = 'Density' if index is None else f'MO {index}'
+            st.markdown(f"#### {title} · {resolution}³ points")
+            components.html(visualize_cube_in_component(content, title, isovalue, opacity), height=380, width=420)
+            filename = f"density_{resolution}.cube" if index is None else f"MO_{index}_{resolution}.cube"
+            st.download_button(f"Download {title} ({resolution}³)", content, filename, key=f'cube_{index}_{resolution}')
+
+    python_script = build_input_script(result)
+    with script_container:
+        with st.expander("Input Script", expanded=True):
+            st.code(python_script, language='python')
+        st.download_button("Download input script", python_script, "pyfock_calculation.py", "text/x-python")
+    with output_container:
+        with st.expander("Calculation Output"):
+            st.code(strip_ansi(result['log']))
+        st.download_button("Download output text", strip_ansi(result['log']), "pyfock_output.txt", "text/plain")
+    if result['actions']:
+        with st.expander("Updated Input Script — includes requested calculations"):
+            st.code(python_script, language='python')
+        st.download_button("Download updated input script", python_script, "pyfock_calculation.py", "text/x-python", key='updated_input_download')
 
 # Footer
 st.markdown("---")
